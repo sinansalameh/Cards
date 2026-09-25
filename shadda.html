@@ -405,9 +405,6 @@ function viewNew(){
   const active=S.games.filter(g=>g.status==='active').sort((a,b)=>b.createdAt-a.createdAt);
   let h=`<section class="card"><h2>لعبة جديدة</h2>
   <div class="seg big" role="group" aria-label="نوع اللعبة"><button data-act="type" data-v="tarneeb" aria-pressed="${f.type==='tarneeb'}">طرنيب 41</button><button data-act="type" data-v="trex" aria-pressed="${f.type==='trex'}">تركس شراكة</button></div>
-  <p class="note">${f.type==='tarneeb'
-    ?'كل لاعب يطلب لنفسه من 2 إلى 13، والطلب 7 وما فوق يُحسب مضاعفاً. مجموع الطلبات 11 على الأقل (12 إذا تجاوز لاعبان 30)، ومن وصل 30 يطلب 3 على الأقل، ومن وصل 40 يطلب 4 على الأقل. يفوز الفريق حين يصل أحد لاعبيه إلى 41 وشريكه ليس بالسالب. إذا وصل لاعبان من الفريقين إلى 41 في الجولة نفسها تستمر اللعبة جولة بجولة، ومن يكون الأعلى نقاطاً في نهاية الجولة يفوز.'
-    :'4 ممالك × 5 ألعاب = 20 جولة. نقاط الشريكين تُجمع للفريق، والفريق الأعلى مجموعاً في النهاية يفوز.'}</p>
   ${need>0?`<p class="warn">أضف ${need} ${need===1?'لاعباً':'لاعبين'} على الأقل للبدء.</p>`:''}
   <div class="teamsel"><div class="tbox t0"><h3>الفريق الأول</h3>${seat(0,'اللاعب الأول')}${seat(2,'شريكه (مقابله)')}</div>
   <div class="tbox t1"><h3>الفريق الثاني</h3>${seat(1,'على يمين الأول')}${seat(3,'شريكه (مقابله)')}</div></div>
