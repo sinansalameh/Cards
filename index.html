@@ -38,7 +38,7 @@
 html,body{background:var(--bg)}
 body{color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.55}
 #app{max-width:640px;margin:0 auto;padding-inline:16px;padding-block:0 calc(92px + env(safe-area-inset-bottom,0px))}
-.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-block:18px 12px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:18px 12px}
 .brand{font-family:var(--display);font-size:28px;font-weight:700;line-height:1.1}
 .suits{color:var(--muted);letter-spacing:.35em;font-size:15px;white-space:nowrap}
 .suits .r{color:var(--neg)}
@@ -210,6 +210,20 @@ textarea{font-size:12px;font-family:ui-monospace,Consolas,monospace;resize:verti
 .tabs button[aria-current="page"]{color:var(--accent)}
 #toast{position:fixed;inset-inline:16px;bottom:calc(78px + env(safe-area-inset-bottom,0px));margin-inline:auto;max-width:420px;background:var(--ink);color:var(--bg);padding:11px 14px;border-radius:11px;text-align:center;font-size:14px;font-weight:600;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:6}
 #toast.show{opacity:1;transform:none}
+.livepill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;max-width:52vw;overflow:hidden;white-space:nowrap}
+.ld{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;display:inline-block}
+.on .ld{background:var(--pos);box-shadow:0 0 0 3px var(--pos-soft)}
+.offline .ld{background:var(--gold)}
+.error .ld{background:var(--neg)}
+.livest{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)}
+.check{display:flex;gap:8px;align-items:center;font-size:14px}
+.check input{width:auto}
+form.grid{display:grid;gap:10px}
+.grouplist{display:grid}
+.grow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-block:8px;border-top:1px solid var(--line)}
+.grow > span:first-child{flex:1 1 120px;font-weight:600}
+.grow small{color:var(--muted)}
+.chip.live{background:var(--pos-soft);color:var(--pos)}
 @media (max-width:420px){
   .teamsel{grid-template-columns:1fr}
   .score{font-size:23px}
@@ -224,7 +238,7 @@ textarea{font-size:12px;font-family:ui-monospace,Consolas,monospace;resize:verti
 <div id="app" dir="rtl" lang="ar">
   <header class="top">
     <div class="brand">&#x62F;&#x641;&#x62A;&#x631; &#x627;&#x644;&#x634;&#x62F;&#x651;&#x629;</div>
-    <div class="suits" aria-hidden="true">&#x2660;<span class="r">&#x2665;</span><span class="r">&#x2666;</span>&#x2663;</div>
+    <div id="livepill"></div>
   </header>
   <main id="main"></main>
 </div>
@@ -349,9 +363,151 @@ function load(){
   catch(e){storageOk=false}
   return demoState();
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));storageOk=true}catch(e){storageOk=false}}
-let S=load();
+function save(){
+  if(G.active){saveCur();syncLive();return}
+  try{localStorage.setItem(KEY,JSON.stringify(S));storageOk=true}catch(e){storageOk=false}
+}
+let S={v:1,players:[],games:[],current:null,demo:false};
 let tab='game',nf=null,drafts={},confirmKey=null,editing=null,statType='all',importText='';
+
+/* ---------- live sharing (Firebase) ----------
+   A group lives at groups/{gid} (name, owner, players) with games in
+   groups/{gid}/games. Everyone with the group id can read; only the owner
+   and devices that joined with the edit key can write (see firestore.rules). */
+const FB_CONFIG={apiKey:"AIzaSyAIy0j4AvhQmEfWOVGXlrTkVfaX68CKwOE",authDomain:"cards-10ada.firebaseapp.com",projectId:"cards-10ada",storageBucket:"cards-10ada.firebasestorage.app",messagingSenderId:"1065417727377",appId:"1:1065417727377:web:fcf5afd9b13519871ace30"};
+const FB_BASE='https://www.gstatic.com/firebasejs/10.14.1/';
+const GKEY='shadda.groups';
+function loadGroups(){try{const g=JSON.parse(localStorage.getItem(GKEY));if(g&&g.list)return g}catch(e){}return{active:null,list:{}}}
+function saveGroups(){try{localStorage.setItem(GKEY,JSON.stringify(G))}catch(e){}}
+let G=loadGroups(),live=null,fbDb=null,follow=true,busy=false,groupErr='',renderPending=false;
+const canEdit=()=>!G.active||!!(live&&live.role==='editor');
+const byNew=(a,b)=>b.createdAt-a.createdAt;
+function rid(n){const a='abcdefghijkmnpqrstuvwxyz23456789',b=new Uint8Array(n);crypto.getRandomValues(b);return Array.from(b,x=>a[x%a.length]).join('')}
+function parseLink(t){const m=String(t||'').match(/#g-([a-z0-9]{6,20})(?:-([a-z0-9]{8,40}))?/i);return m?{gid:m[1].toLowerCase(),key:m[2]?m[2].toLowerCase():null}:null}
+const appBase=()=>location.href.split('#')[0];
+const viewLink=gid=>appBase()+'#g-'+gid;
+const editLink=(gid,key)=>appBase()+'#g-'+gid+'-'+key;
+function fbMsg(e){
+  const c=(e&&e.code)||'';
+  if(c==='auth/operation-not-allowed'||c==='auth/admin-restricted-operation'||c==='auth/configuration-not-found')return'\u0627\u0644\u062F\u062E\u0648\u0644 \u0627\u0644\u0645\u062C\u0647\u0648\u0644 \u063A\u064A\u0631 \u0645\u0641\u0639\u0651\u0644 \u0641\u064A Firebase (Authentication \u2190 Sign-in method \u2190 Anonymous).';
+  if(c==='permission-denied')return'\u0642\u0648\u0627\u0639\u062F Firestore \u0631\u0641\u0636\u062A \u0627\u0644\u0639\u0645\u0644\u064A\u0629 \u2014 \u062A\u0623\u0643\u062F \u0645\u0646 \u0646\u0633\u062E \u0627\u0644\u0642\u0648\u0627\u0639\u062F \u0643\u0645\u0627 \u0647\u064A.';
+  if(c==='auth/unauthorized-domain')return'\u0646\u0637\u0627\u0642 \u0627\u0644\u0645\u0648\u0642\u0639 \u063A\u064A\u0631 \u0645\u0633\u0645\u0648\u062D \u0641\u064A Firebase (Authentication \u2190 Settings \u2190 Authorized domains).';
+  if(c==='auth/network-request-failed'||c==='unavailable')return'\u0644\u0627 \u064A\u0648\u062C\u062F \u0627\u062A\u0635\u0627\u0644 \u0628\u0627\u0644\u0625\u0646\u062A\u0631\u0646\u062A.';
+  return'\u062A\u0639\u0630\u0651\u0631 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0628\u062E\u062F\u0645\u0629 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629'+(c?' ('+c+')':'')+'.';
+}
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('script'));document.head.appendChild(s)})}
+let fbReady=null;
+function initFirebase(){
+  if(fbReady)return fbReady;
+  fbReady=(async()=>{
+    if(!window.firebase)await loadScript(FB_BASE+'firebase-app-compat.js');
+    await Promise.all([loadScript(FB_BASE+'firebase-auth-compat.js'),loadScript(FB_BASE+'firebase-firestore-compat.js')]);
+    if(!firebase.apps.length)firebase.initializeApp(FB_CONFIG);
+    const db=firebase.firestore();
+    try{await db.enablePersistence({synchronizeTabs:true})}catch(e){}
+    const auth=firebase.auth();
+    let user=await new Promise(r=>{const u=auth.onAuthStateChanged(x=>{u();r(x)})}),authErr=null;
+    if(!user){try{user=(await auth.signInAnonymously()).user}catch(e){authErr=e}}
+    return{db,uid:user?user.uid:null,authErr};
+  })();
+  fbReady.catch(()=>{fbReady=null});
+  return fbReady;
+}
+function saveCur(){try{localStorage.setItem('shadda.cur.'+G.active,S.current||'')}catch(e){}}
+function stopLive(){if(live)live.unsub.forEach(u=>{try{u()}catch(e){}});live=null}
+function softRender(){
+  const a=document.activeElement;
+  if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&$('#main').contains(a)){renderPending=true;return}
+  render();
+}
+function connect(gid){
+  stopLive();
+  let cur=null;try{cur=localStorage.getItem('shadda.cur.'+gid)||null}catch(e){}
+  S={v:1,players:[],games:[],current:cur,demo:false};
+  nf=null;drafts={};follow=true;confirmKey=null;
+  const known=G.list[gid]||{};
+  const me=live={gid,status:'connecting',role:known.key?'editor':'viewer',name:known.name||'',unsub:[],synced:{games:{},players:null},err:'',loaded:false};
+  render();
+  setTimeout(()=>{if(live===me&&!me.loaded&&me.status!=='error'){me.status='offline';me.err='\u0644\u0645 \u064A\u0635\u0644 \u0631\u062F \u0645\u0646 \u0642\u0627\u0639\u062F\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u2014 \u062A\u062D\u0642\u0642 \u0645\u0646 \u0627\u0644\u0625\u0646\u062A\u0631\u0646\u062A. \u0633\u062A\u0633\u062A\u0645\u0631 \u0627\u0644\u0645\u062D\u0627\u0648\u0644\u0629 \u062A\u0644\u0642\u0627\u0626\u064A\u0627\u064B.';render()}},12000);
+  initFirebase().then(f=>{
+    if(live!==me)return;
+    fbDb=f.db;
+    const gref=f.db.collection('groups').doc(gid);
+    if(known.key&&!f.uid){me.role='viewer';toast(fbMsg(f.authErr))}
+    if(known.key&&f.uid){
+      const ed=gref.collection('editors').doc(f.uid);
+      ed.get().then(s=>s.exists?null:ed.set({key:known.key})).catch(e=>{
+        if(live!==me||!e||e.code!=='permission-denied')return;
+        me.role='viewer';delete G.list[gid].key;saveGroups();render();
+        toast('\u0631\u0627\u0628\u0637 \u0627\u0644\u062A\u0639\u062F\u064A\u0644 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D \u2014 \u0623\u0646\u062A \u0641\u064A \u0648\u0636\u0639 \u0627\u0644\u0645\u0634\u0627\u0647\u062F\u0629');
+      });
+    }
+    me.unsub.push(gref.onSnapshot({includeMetadataChanges:true},s=>{
+      if(live!==me)return;
+      if(!s.exists){if(!s.metadata.fromCache){me.status='error';me.err='\u0644\u0645 \u0646\u062C\u062F \u0647\u0630\u0647 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629 \u2014 \u062A\u0623\u0643\u062F \u0645\u0646 \u0627\u0644\u0631\u0627\u0628\u0637.';render()}return}
+      const d=s.data();
+      me.name=d.name||'';
+      if(d.owner===f.uid)me.role='editor';
+      if(G.list[gid]&&G.list[gid].name!==me.name){G.list[gid].name=me.name;saveGroups()}
+      S.players=d.players||[];me.synced.players=JSON.stringify(S.players);
+      me.status=s.metadata.fromCache?'offline':'on';me.loaded=true;me.err='';
+      softRender();
+    },e=>{if(live!==me)return;me.status='error';me.err=fbMsg(e);render()}));
+    me.unsub.push(gref.collection('games').onSnapshot(qs=>{
+      if(live!==me)return;
+      S.games=qs.docs.map(d=>d.data());
+      me.synced.games=Object.fromEntries(S.games.map(g=>[g.id,JSON.stringify(g)]));
+      softRender();
+    },e=>{if(live!==me)return;me.status='error';me.err=fbMsg(e);render()}));
+  }).catch(e=>{if(live!==me)return;me.status='error';me.err=fbMsg(e);render()});
+}
+function syncLive(){
+  if(!live||!fbDb||live.role!=='editor'||!live.loaded)return;
+  const gref=fbDb.collection('groups').doc(live.gid),sy=live.synced;
+  const fail=e=>toast('\u0644\u0645 \u064A\u064F\u062D\u0641\u0638 \u0627\u0644\u062A\u063A\u064A\u064A\u0631 \u0639\u0644\u0649 \u0627\u0644\u0625\u0646\u062A\u0631\u0646\u062A: '+fbMsg(e));
+  const pj=JSON.stringify(S.players);
+  if(pj!==sy.players){sy.players=pj;gref.update({players:JSON.parse(pj)}).catch(fail)}
+  const seen=new Set();
+  S.games.forEach(g=>{
+    seen.add(g.id);const j=JSON.stringify(g);
+    if(sy.games[g.id]!==j){sy.games[g.id]=j;gref.collection('games').doc(g.id).set(JSON.parse(j)).catch(fail)}
+  });
+  Object.keys(sy.games).forEach(id=>{if(!seen.has(id)){delete sy.games[id];gref.collection('games').doc(id).delete().catch(fail)}});
+}
+async function createGroup(name,migrate){
+  if(!navigator.onLine){groupErr='\u062A\u062D\u062A\u0627\u062C \u0627\u062A\u0635\u0627\u0644\u0627\u064B \u0628\u0627\u0644\u0625\u0646\u062A\u0631\u0646\u062A \u0644\u0625\u0646\u0634\u0627\u0621 \u0645\u062C\u0645\u0648\u0639\u0629.';render();return}
+  busy=true;groupErr='';render();
+  try{
+    const f=await initFirebase();
+    if(!f.uid)throw f.authErr;
+    const gid=rid(10),key=rid(16),gref=f.db.collection('groups').doc(gid);
+    const players=migrate?S.players:[],games=migrate?S.games:[];
+    await gref.set({name,owner:f.uid,createdAt:Date.now(),players:JSON.parse(JSON.stringify(players))});
+    await gref.collection('private').doc('key').set({key});
+    for(let i=0;i<games.length;i+=400){
+      const b=f.db.batch();
+      games.slice(i,i+400).forEach(g=>b.set(gref.collection('games').doc(g.id),JSON.parse(JSON.stringify(g))));
+      await b.commit();
+    }
+    G.list[gid]={name,key};G.active=gid;saveGroups();
+    history.replaceState(null,'',viewLink(gid));
+    busy=false;tab='players';connect(gid);
+    toast('\u0623\u064F\u0646\u0634\u0626\u062A \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629 \u2014 \u0634\u0627\u0631\u0643 \u0631\u0627\u0628\u0637 \u0627\u0644\u0645\u0634\u0627\u0647\u062F\u0629');
+  }catch(e){busy=false;groupErr=fbMsg(e);render()}
+}
+function joinLink(text){
+  const p=parseLink(text);
+  if(!p){toast('\u0647\u0630\u0627 \u0644\u064A\u0633 \u0631\u0627\u0628\u0637 \u0645\u062C\u0645\u0648\u0639\u0629 \u0635\u0627\u0644\u062D\u0627\u064B');return}
+  G.list[p.gid]=Object.assign(G.list[p.gid]||{name:''},p.key?{key:p.key}:{});
+  G.active=p.gid;saveGroups();
+  history.replaceState(null,'',viewLink(p.gid));
+  tab='game';connect(p.gid);
+}
+function leaveGroup(){
+  stopLive();G.active=null;saveGroups();
+  history.replaceState(null,'',appBase());
+  S=load();nf=null;drafts={};confirmKey=null;tab='players';render();
+}
 
 const game=id=>S.games.find(g=>g.id===id);
 const playerName=id=>{const p=S.players.find(p=>p.id===id);return p?p.name:null};
@@ -390,13 +546,14 @@ function confirmBtn(key,label,act,attrs,plain){
   return`<button class="ghost${plain?'':' danger'}" data-act="ask" data-key="${key}">${label}</button>`;
 }
 function gameHead(g,label,sub){
-  return`<section class="gamehead"><div><span><span class="chip">${label}</span></span><h2>${teamName(g,0)} <span class="vs">\u0636\u062F</span> ${teamName(g,1)}</h2><p class="sub">${sub}</p></div><button class="ghost" data-act="newgame">+ \u0644\u0639\u0628\u0629 \u062C\u062F\u064A\u062F\u0629</button></section>`;
+  return`<section class="gamehead"><div><span><span class="chip">${label}</span></span><h2>${teamName(g,0)} <span class="vs">\u0636\u062F</span> ${teamName(g,1)}</h2><p class="sub">${sub}</p></div>${canEdit()?'<button class="ghost" data-act="newgame">+ \u0644\u0639\u0628\u0629 \u062C\u062F\u064A\u062F\u0629</button>':follow?'<span class="chip live">\u0645\u0628\u0627\u0634\u0631</span>':'<button class="ghost" data-act="follow">\u062A\u0627\u0628\u0639 \u0627\u0644\u0644\u0639\u0628\u0629 \u0627\u0644\u062C\u0627\u0631\u064A\u0629</button>'}</section>`;
 }
 function winBanner(g){
   const title=g.winner===-1?'\u062A\u0639\u0627\u062F\u0644!':`\u0641\u0627\u0632 ${teamName(g,g.winner)}`;
-  return`<section class="card win"><div class="suits" aria-hidden="true">\u2660<span class="r">\u2665</span><span class="r">\u2666</span>\u2663</div><h2>${title}</h2><button class="btn sm" data-act="rematch">\u0644\u0639\u0628\u0629 \u062C\u062F\u064A\u062F\u0629 \u0628\u0646\u0641\u0633 \u0627\u0644\u0641\u0631\u0642</button></section>`;
+  return`<section class="card win"><div class="suits" aria-hidden="true">\u2660<span class="r">\u2665</span><span class="r">\u2666</span>\u2663</div><h2>${title}</h2>${canEdit()?'<button class="btn sm" data-act="rematch">\u0644\u0639\u0628\u0629 \u062C\u062F\u064A\u062F\u0629 \u0628\u0646\u0641\u0633 \u0627\u0644\u0641\u0631\u0642</button>':''}</section>`;
 }
 function gameFoot(g){
+  if(!canEdit())return'';
   const n=(g.rounds||g.deals).length;
   return`<section class="foot">${n?confirmBtn('undo','\u062A\u0631\u0627\u062C\u0639 \u0639\u0646 \u0622\u062E\u0631 \u062C\u0648\u0644\u0629','undo','',true):'<span></span>'}${confirmBtn('delgame','\u0627\u062D\u0630\u0641 \u0627\u0644\u0644\u0639\u0628\u0629','delgame')}</section>`;
 }
@@ -460,7 +617,7 @@ function viewTarneeb(g){
   let h=gameHead(g,'\u0637\u0631\u0646\u064A\u0628 41',done?`\u0627\u0646\u062A\u0647\u062A \u0628\u0639\u062F ${n} \u062C\u0648\u0644\u0627\u062A \u00B7 ${fdate(g.createdAt)}`:`\u0627\u0644\u062C\u0648\u0644\u0629 ${n+1} \u00B7 \u0627\u0644\u062A\u0648\u0632\u064A\u0639 \u0639\u0644\u0649 ${esc(pname(g,n%4))}`);
   if(done)h+=winBanner(g);
   h+=`<section class="teams">${tTeam(g,0,sc)}${tTeam(g,1,sc)}</section>`;
-  if(!done){const st=tStatus(g,sc);if(st)h+=`<p class="status">${st}</p>`;h+=tEntry(g,sc,rules)}
+  if(!done){const st=tStatus(g,sc);if(st)h+=`<p class="status">${st}</p>`;if(canEdit())h+=tEntry(g,sc,rules)}
   return h+tTable(g)+gameFoot(g);
 }
 
@@ -507,11 +664,20 @@ function viewTrex(g){
   if(done)h+=winBanner(g);
   h+=`<section class="teams">${[0,1].map(t=>`<div class="team t${t}${g.winner===t?' won':''}"><div class="tlabel">${t?'\u0627\u0644\u0641\u0631\u064A\u0642 \u0627\u0644\u062B\u0627\u0646\u064A':'\u0627\u0644\u0641\u0631\u064A\u0642 \u0627\u0644\u0623\u0648\u0644'}${g.winner===t?' \u00B7 \u0641\u0627\u0626\u0632':''}</div>${N(team[t],false,'score big'+(team[t]<0?' neg':''))}${[t,t+2].map(s=>`<div class="pl sm"><span class="nm">${esc(pname(g,s))}</span>${N(tot[s],false,'score'+(tot[s]<0?' neg':''))}</div>`).join('')}</div>`).join('')}</section>`;
   h+=xKingdoms(g,done);
-  if(!done)h+=xEntry(g,owner,k);
+  if(!done&&canEdit())h+=xEntry(g,owner,k);
   return h+xTable(g)+gameFoot(g);
 }
-function viewGame(){
+function currentGame(){
+  if(G.active&&!canEdit()&&follow){const gs=S.games.slice().sort(byNew);return gs.find(g=>g.status==='active')||gs[0]||null}
   const g=game(S.current);
+  if(g)return g;
+  if(G.active&&S.current!=='new')return S.games.filter(g=>g.status==='active').sort(byNew)[0]||null;
+  return null;
+}
+function viewGame(){
+  if(live&&!live.loaded)return`<section class="card empty"><p class="livest ${live.status}"><span class="ld"></span>${live.err?esc(live.err):'\u062C\u0627\u0631\u064D \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629\u2026'}</p></section>`;
+  const g=currentGame();
+  if(!g&&!canEdit())return`<section class="card empty"><h2>\u0644\u0627 \u062A\u0648\u062C\u062F \u0644\u0639\u0628\u0629 \u062C\u0627\u0631\u064A\u0629</h2><p class="note">\u0633\u062A\u0638\u0647\u0631 \u0627\u0644\u0646\u062A\u0627\u0626\u062C \u0647\u0646\u0627 \u0645\u0628\u0627\u0634\u0631\u0629 \u062D\u064A\u0646 \u064A\u0628\u062F\u0623 \u0627\u0644\u0645\u0633\u062C\u0651\u0644 \u0644\u0639\u0628\u0629. \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0627\u0644\u0633\u0627\u0628\u0642\u0629 \u0641\u064A \u00AB\u0627\u0644\u0633\u062C\u0644\u00BB.</p></section>`;
   if(!g)return viewNew();
   return g.type==='tarneeb'?viewTarneeb(g):viewTrex(g);
 }
@@ -565,28 +731,50 @@ function viewStats(){
   return h;
 }
 
+function viewShare(){
+  if(!G.active){
+    const known=Object.entries(G.list);
+    return`<section class="card"><h2>\u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629 \u0627\u0644\u0645\u0628\u0627\u0634\u0631\u0629</h2><p class="note">\u0623\u0646\u0634\u0626 \u0645\u062C\u0645\u0648\u0639\u0629 \u0644\u064A\u062A\u0627\u0628\u0639 \u0623\u0635\u062F\u0642\u0627\u0624\u0643 \u0627\u0644\u0646\u062A\u0627\u0626\u062C \u0645\u0628\u0627\u0634\u0631\u0629 \u0639\u0644\u0649 \u0647\u0648\u0627\u062A\u0641\u0647\u0645. \u0623\u0646\u062A \u062A\u0633\u062C\u0651\u0644 \u0627\u0644\u0646\u062A\u0627\u0626\u062C\u060C \u0648\u0627\u0644\u0628\u0627\u0642\u0648\u0646 \u064A\u0634\u0627\u0647\u062F\u0648\u0646.</p>
+    ${groupErr?`<p class="warn">${esc(groupErr)}</p>`:''}
+    <form data-form="mkgroup" class="grid"><label class="field"><span>\u0627\u0633\u0645 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629</span><input id="gname" maxlength="30" placeholder="\u0645\u062B\u0644\u0627\u064B: \u0634\u0644\u0629 \u0627\u0644\u062E\u0645\u064A\u0633" autocomplete="off"></label>
+    ${!S.demo&&(S.games.length||S.players.length)?'<label class="check"><input type="checkbox" id="gmigrate" checked> \u0627\u0646\u0642\u0644 \u0644\u0627\u0639\u0628\u064A\u0651 \u0648\u0623\u0644\u0639\u0627\u0628\u064A \u0627\u0644\u062D\u0627\u0644\u064A\u0629 \u0625\u0644\u0649 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629</label>':''}
+    <button class="btn"${busy?' disabled':''}>${busy?'\u062C\u0627\u0631\u064D \u0627\u0644\u0625\u0646\u0634\u0627\u0621\u2026':'\u0623\u0646\u0634\u0626 \u0645\u062C\u0645\u0648\u0639\u0629'}</button></form>
+    <form data-form="join" class="inline"><input id="glink" placeholder="\u0623\u0648 \u0623\u0644\u0635\u0642 \u0631\u0627\u0628\u0637 \u0645\u062C\u0645\u0648\u0639\u0629" dir="ltr" autocomplete="off"><button class="ghost">\u0627\u0646\u0636\u0645</button></form>
+    ${known.length?`<div class="grouplist"><h3>\u0645\u062C\u0645\u0648\u0639\u0627\u062A \u0639\u0644\u0649 \u0647\u0630\u0627 \u0627\u0644\u062C\u0647\u0627\u0632</h3>${known.map(([id,x])=>`<div class="grow"><span>${esc(x.name||id)}</span><small>${x.key?'\u0645\u0633\u062C\u0651\u0644':'\u0645\u0634\u0627\u0647\u062F'}</small><button class="ghost sm" data-act="opengroup" data-id="${id}">\u0627\u0641\u062A\u062D</button>${confirmBtn('forget-'+id,'\u0625\u0632\u0627\u0644\u0629','forget',`data-id="${id}"`)}</div>`).join('')}</div>`:''}
+    </section>`;
+  }
+  const key=G.list[G.active]&&G.list[G.active].key;
+  const st={connecting:'\u062C\u0627\u0631\u064D \u0627\u0644\u0627\u062A\u0635\u0627\u0644\u2026',on:'\u0645\u062A\u0635\u0644 \u2014 \u0627\u0644\u062A\u062D\u062F\u064A\u062B \u0645\u0628\u0627\u0634\u0631',offline:live.loaded?'\u063A\u064A\u0631 \u0645\u062A\u0635\u0644 \u2014 \u0633\u062A\u064F\u0631\u0633\u0644 \u0627\u0644\u062A\u063A\u064A\u064A\u0631\u0627\u062A \u0639\u0646\u062F \u0639\u0648\u062F\u0629 \u0627\u0644\u0625\u0646\u062A\u0631\u0646\u062A':live.err,error:live.err}[live.status];
+  return`<section class="card"><div class="cardhead"><h2>${esc(live.name||'\u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629')}</h2><span class="rule">${live.role==='editor'?'\u0623\u0646\u062A \u0627\u0644\u0645\u0633\u062C\u0651\u0644':'\u0645\u0634\u0627\u0647\u062F\u0629 \u0641\u0642\u0637'}</span></div>
+  <p class="livest ${live.status}"><span class="ld"></span>${esc(st)}</p>
+  <label class="field"><span>\u0631\u0627\u0628\u0637 \u0627\u0644\u0645\u0634\u0627\u0647\u062F\u0629 \u2014 \u0623\u0631\u0633\u0644\u0647 \u0644\u0643\u0644 \u0627\u0644\u0623\u0635\u062F\u0642\u0627\u0621</span><span class="inline"><input readonly dir="ltr" id="lnkv" value="${esc(viewLink(G.active))}"><button type="button" class="ghost" data-act="copylink" data-t="lnkv">\u0627\u0646\u0633\u062E</button></span></label>
+  ${key&&live.role==='editor'?`<label class="field"><span>\u0631\u0627\u0628\u0637 \u0627\u0644\u062A\u0633\u062C\u064A\u0644 \u2014 \u0644\u0643 \u0648\u062D\u062F\u0643\u060C \u0644\u0627 \u062A\u0631\u0633\u0644\u0647 \u0625\u0644\u0627 \u0644\u0645\u0646 \u064A\u0633\u062C\u0651\u0644 \u0627\u0644\u0646\u062A\u0627\u0626\u062C</span><span class="inline"><input readonly dir="ltr" id="lnke" value="${esc(editLink(G.active,key))}"><button type="button" class="ghost" data-act="copylink" data-t="lnke">\u0627\u0646\u0633\u062E</button></span></label>`:''}
+  <div class="row"><button class="ghost" data-act="leavegroup">\u0627\u0644\u062E\u0631\u0648\u062C \u0625\u0644\u0649 \u0628\u064A\u0627\u0646\u0627\u062A \u0647\u0630\u0627 \u0627\u0644\u062C\u0647\u0627\u0632</button></div></section>`;
+}
 function viewPlayers(){
   const count=id=>S.games.filter(g=>g.seats.includes(id)).length;
-  return`<section class="card"><h2>\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646</h2><p class="note">\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629 \u0627\u0644\u062B\u0627\u0628\u062A\u0629 \u2014 \u062A\u064F\u0628\u0646\u0649 \u0639\u0644\u064A\u0647\u0627 \u0627\u0644\u0625\u062D\u0635\u0627\u0621\u0627\u062A.</p>
+  if(!canEdit())return viewShare()+`<section class="card"><h2>\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646</h2>${S.players.length?`<ul class="plist">${S.players.map(p=>`<li><span class="nm">${esc(p.name)}</span><span class="pgames">${count(p.id)} \u0644\u0639\u0628\u0629</span></li>`).join('')}</ul>`:'<p class="note">\u0644\u0627 \u064A\u0648\u062C\u062F \u0644\u0627\u0639\u0628\u0648\u0646 \u0628\u0639\u062F.</p>'}</section>`;
+  return viewShare()+`<section class="card"><h2>\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646</h2><p class="note">\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629 \u0627\u0644\u062B\u0627\u0628\u062A\u0629 \u2014 \u062A\u064F\u0628\u0646\u0649 \u0639\u0644\u064A\u0647\u0627 \u0627\u0644\u0625\u062D\u0635\u0627\u0621\u0627\u062A.</p>
   <form data-form="addp" class="inline"><input id="newp2" placeholder="\u0627\u0633\u0645 \u0627\u0644\u0644\u0627\u0639\u0628" maxlength="24" autocomplete="off"><button class="btn sm">\u0623\u0636\u0641</button></form>
   ${S.players.length?`<ul class="plist">${S.players.map(p=>editing===p.id
     ?`<li><form data-form="rename" data-id="${p.id}" class="inline"><input id="ren-${p.id}" value="${esc(p.name)}" maxlength="24" autocomplete="off"><button class="btn sm">\u062D\u0641\u0638</button><button type="button" class="ghost" data-act="cancelEdit">\u0625\u0644\u063A\u0627\u0621</button></form></li>`
     :`<li><span class="nm">${esc(p.name)}</span><span class="pgames">${count(p.id)} \u0644\u0639\u0628\u0629</span><button class="ghost sm" data-act="edit" data-id="${p.id}">\u062A\u0639\u062F\u064A\u0644</button>${confirmBtn('delp-'+p.id,'\u062D\u0630\u0641','delp',`data-id="${p.id}"`)}</li>`).join('')}</ul>`:'<p class="note">\u0644\u0627 \u064A\u0648\u062C\u062F \u0644\u0627\u0639\u0628\u0648\u0646 \u0628\u0639\u062F.</p>'}
   </section>
-  <section class="card"><h2>\u0646\u0642\u0644 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0648\u0627\u0644\u0646\u0633\u062E \u0627\u0644\u0627\u062D\u062A\u064A\u0627\u0637\u064A</h2>
+  ${G.active?'':`<section class="card"><h2>\u0646\u0642\u0644 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0648\u0627\u0644\u0646\u0633\u062E \u0627\u0644\u0627\u062D\u062A\u064A\u0627\u0637\u064A</h2>
   <p class="note">\u062A\u064F\u062D\u0641\u0638 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0641\u064A \u0647\u0630\u0627 \u0627\u0644\u0645\u062A\u0635\u0641\u062D \u0639\u0644\u0649 \u0647\u0630\u0627 \u0627\u0644\u062C\u0647\u0627\u0632. \u0644\u0646\u0642\u0644\u0647\u0627 \u0625\u0644\u0649 \u0647\u0627\u062A\u0641 \u0635\u062F\u064A\u0642 \u0623\u0648 \u0644\u062D\u0641\u0638 \u0646\u0633\u062E\u0629: \u0627\u0646\u0633\u062E \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0648\u0623\u0631\u0633\u0644\u0647\u0627\u060C \u062B\u0645 \u0623\u0644\u0635\u0642\u0647\u0627 \u0641\u064A \u062E\u0627\u0646\u0629 \u0627\u0644\u0627\u0633\u062A\u064A\u0631\u0627\u062F \u0639\u0644\u0649 \u0627\u0644\u062C\u0647\u0627\u0632 \u0627\u0644\u0622\u062E\u0631.</p>
   <div class="row"><button class="btn sm" data-act="copy">\u0627\u0646\u0633\u062E \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A</button></div>
   <label class="field"><span>\u0627\u0633\u062A\u064A\u0631\u0627\u062F: \u0623\u0644\u0635\u0642 \u0627\u0644\u0646\u0635 \u0647\u0646\u0627 \u0623\u0648 \u0627\u062E\u062A\u0631 \u0645\u0644\u0641\u0627\u064B</span><textarea id="importText" rows="4" dir="ltr" spellcheck="false">${esc(importText)}</textarea></label>
   <input type="file" id="importFile" accept=".json,.txt,application/json,text/plain" aria-label="\u0627\u062E\u062A\u0631 \u0645\u0644\u0641 \u0628\u064A\u0627\u0646\u0627\u062A">
   <div class="row">${confirmBtn('import','\u0627\u0633\u062A\u0628\u062F\u0644 \u0628\u064A\u0627\u0646\u0627\u062A\u064A \u0628\u0627\u0644\u0645\u0633\u062A\u0648\u0631\u062F\u0629','import','',true)}${confirmBtn('reset','\u0627\u0645\u0633\u062D \u0643\u0644 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A','reset')}</div>
-  </section>`;
+  </section>`}`;
 }
 
 function render(){
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===tab?'page':'false'));
   let h='';
   if(!storageOk)h+=`<div class="banner"><p>\u0627\u0644\u0645\u062A\u0635\u0641\u062D \u0644\u0627 \u064A\u0633\u0645\u062D \u0628\u0627\u0644\u062D\u0641\u0638 \u0647\u0646\u0627\u060C \u0644\u0630\u0627 \u0633\u062A\u0636\u064A\u0639 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0639\u0646\u062F \u0627\u0644\u0625\u063A\u0644\u0627\u0642. \u0627\u0646\u0633\u062E \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0645\u0646 \u0642\u0633\u0645 \u00AB\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646\u00BB \u0642\u0628\u0644 \u0627\u0644\u062E\u0631\u0648\u062C.</p></div>`;
-  if(S.demo)h+=`<div class="banner"><p>\u0647\u0630\u0647 <b>\u0628\u064A\u0627\u0646\u0627\u062A \u062A\u062C\u0631\u064A\u0628\u064A\u0629</b> \u0644\u062A\u062A\u0639\u0631\u0651\u0641 \u0639\u0644\u0649 \u0627\u0644\u062F\u0641\u062A\u0631: \u0644\u0627\u0639\u0628\u0648\u0646 \u0648\u0623\u0644\u0639\u0627\u0628 \u0648\u0647\u0645\u064A\u0629.</p><button class="btn sm" data-act="demoClear">\u0627\u0645\u0633\u062D\u0647\u0627 \u0648\u0627\u0628\u062F\u0623</button><button class="ghost" data-act="demoKeep">\u0623\u0628\u0642\u0650\u0647\u0627 \u0627\u0644\u0622\u0646</button></div>`;
+  $('#livepill').innerHTML=G.active&&live?`<button class="livepill ${live.status}" data-act="tab" data-tab="players"><span class="ld"></span>${esc(live.name||'\u0645\u062C\u0645\u0648\u0639\u0629')}</button>`:'<div class="suits" aria-hidden="true">\u2660<span class="r">\u2665</span><span class="r">\u2666</span>\u2663</div>';
+  if(S.demo&&!G.active)h+=`<div class="banner"><p>\u0647\u0630\u0647 <b>\u0628\u064A\u0627\u0646\u0627\u062A \u062A\u062C\u0631\u064A\u0628\u064A\u0629</b> \u0644\u062A\u062A\u0639\u0631\u0651\u0641 \u0639\u0644\u0649 \u0627\u0644\u062F\u0641\u062A\u0631: \u0644\u0627\u0639\u0628\u0648\u0646 \u0648\u0623\u0644\u0639\u0627\u0628 \u0648\u0647\u0645\u064A\u0629.</p><button class="btn sm" data-act="demoClear">\u0627\u0645\u0633\u062D\u0647\u0627 \u0648\u0627\u0628\u062F\u0623</button><button class="ghost" data-act="demoKeep">\u0623\u0628\u0642\u0650\u0647\u0627 \u0627\u0644\u0622\u0646</button></div>`;
   h+=tab==='game'?viewGame():tab==='history'?viewHistory():tab==='stats'?viewStats():viewPlayers();
   $('#main').innerHTML=h;
 }
@@ -614,16 +802,27 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]');
   if(!el||el.disabled)return;
   wake();
-  const a=el.dataset.act,ds=el.dataset,g=game(S.current);
+  const a=el.dataset.act,ds=el.dataset,g=currentGame();
+  if(!canEdit()&&['start','rematch','bid','made','saveRound','undo','delgame','pick','unpick','king','cnt','order','saveDeal','edit','delp','import','reset','demoClear','newgame'].includes(a)){toast('\u0623\u0646\u062A \u0641\u064A \u0648\u0636\u0639 \u0627\u0644\u0645\u0634\u0627\u0647\u062F\u0629');return}
+  renderPending=false;
   switch(a){
+    case'follow':follow=true;break;
+    case'copylink':{
+      const inp=document.getElementById(ds.t);
+      const manual=()=>{inp.focus();inp.select();toast('\u0627\u0646\u0633\u062E \u0627\u0644\u0631\u0627\u0628\u0637 \u0627\u0644\u0645\u062D\u062F\u062F')};
+      try{navigator.clipboard.writeText(inp.value).then(()=>toast('\u0646\u064F\u0633\u062E \u0627\u0644\u0631\u0627\u0628\u0637'),manual)}catch(err){manual()}
+      return}
+    case'leavegroup':leaveGroup();return;
+    case'opengroup':G.active=ds.id;saveGroups();history.replaceState(null,'',viewLink(ds.id));tab='game';connect(ds.id);return;
+    case'forget':delete G.list[ds.id];saveGroups();confirmKey=null;break;
     case'tab':tab=ds.tab;confirmKey=null;editing=null;render();window.scrollTo(0,0);return;
     case'ask':confirmKey=ds.key;break;
     case'cancel':confirmKey=null;break;
     case'type':nfGet().type=ds.v;break;
     case'start':{const f=nfGet();if(f.seats.every(Boolean)&&new Set(f.seats).size===4){newGame(f.type,f.seats.slice(),f.firstKing);toast('\u0628\u0627\u0644\u062A\u0648\u0641\u064A\u0642!')}break}
-    case'newgame':S.current=null;confirmKey=null;save();render();window.scrollTo(0,0);return;
+    case'newgame':S.current=G.active?'new':null;confirmKey=null;save();render();window.scrollTo(0,0);return;
     case'rematch':if(g){newGame(g.type,g.seats.slice(),g.type==='trex'?(g.firstKing+1)%4:0);window.scrollTo(0,0)}break;
-    case'open':S.current=ds.id;tab='game';confirmKey=null;save();render();window.scrollTo(0,0);return;
+    case'open':S.current=ds.id;follow=false;tab='game';confirmKey=null;save();render();window.scrollTo(0,0);return;
     case'bid':drafts[g.id].bids[+ds.s]+=+ds.d;break;
     case'made':drafts[g.id].made[+ds.s]=ds.v==='1';break;
     case'saveRound':{
@@ -679,6 +878,9 @@ document.addEventListener('input',e=>{if(e.target.id==='importText')importText=e
 document.addEventListener('submit',e=>{
   e.preventDefault();
   const f=e.target;
+  if(f.dataset.form==='mkgroup'){const n=$('#gname').value.trim().replace(/\s+/g,' ')||'\u0645\u062C\u0645\u0648\u0639\u062A\u0646\u0627',m=$('#gmigrate');createGroup(n,!!(m&&m.checked));return}
+  if(f.dataset.form==='join'){joinLink($('#glink').value);return}
+  if(!canEdit())return;
   if(f.dataset.form==='addp'){const id=f.querySelector('input').id;addPlayer(f);render();const i=document.getElementById(id);if(i)i.focus()}
   else if(f.dataset.form==='rename'){
     const name=f.querySelector('input').value.trim().replace(/\s+/g,' '),p=S.players.find(x=>x.id===f.dataset.id);
@@ -687,9 +889,15 @@ document.addEventListener('submit',e=>{
     p.name=name;editing=null;save();render();
   }
 });
+document.addEventListener('focusout',()=>{if(renderPending)setTimeout(()=>{if(renderPending){renderPending=false;render()}},400)});
+window.addEventListener('hashchange',()=>{const p=parseLink(location.hash);if(p&&(p.gid!==G.active||(p.key&&!(G.list[p.gid]||{}).key)))joinLink(location.hash)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&wl===null&&S.current)wake()});
 
-render();
+{
+  const p=parseLink(location.hash);
+  if(p){G.list[p.gid]=Object.assign(G.list[p.gid]||{name:''},p.key?{key:p.key}:{});G.active=p.gid;saveGroups();history.replaceState(null,'',viewLink(p.gid))}
+  if(G.active)connect(G.active);else{S=load();render()}
+}
 })();
 </script>
 

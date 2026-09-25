@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// Cards scorebook: anyone with a group's id can read it; only the group's
+// creator and devices that joined with the group's edit key can write.
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function groupPath(gid) { return /databases/$(db)/documents/groups/$(gid); }
+    function isEditor(gid) {
+      return signedIn() && (
+        get(groupPath(gid)).data.owner == request.auth.uid ||
+        exists(/databases/$(db)/documents/groups/$(gid)/editors/$(request.auth.uid)));
+    }
+
+    match /groups/{gid} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
+      allow update: if isEditor(gid) && request.resource.data.owner == resource.data.owner;
+      allow delete: if false;
+
+      match /games/{gameId} {
+        allow read: if true;
+        allow write: if isEditor(gid);
+      }
+
+      // The edit key: written once by the creator, never readable by clients.
+      match /private/{doc} {
+        allow read: if false;
+        allow create: if signedIn() && get(groupPath(gid)).data.owner == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      // A device becomes an editor by presenting the key.
+      match /editors/{uid} {
+        allow get: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && request.auth.uid == uid
+          && request.resource.data.key == get(/databases/$(db)/documents/groups/$(gid)/private/key).data.key;
+        allow list, update, delete: if false;
+      }
+    }
+  }
+}

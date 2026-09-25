@@ -35,7 +35,7 @@
 html,body{background:var(--bg)}
 body{color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.55}
 #app{max-width:640px;margin:0 auto;padding-inline:16px;padding-block:0 calc(92px + env(safe-area-inset-bottom,0px))}
-.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-block:18px 12px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:18px 12px}
 .brand{font-family:var(--display);font-size:28px;font-weight:700;line-height:1.1}
 .suits{color:var(--muted);letter-spacing:.35em;font-size:15px;white-space:nowrap}
 .suits .r{color:var(--neg)}
@@ -207,6 +207,20 @@ textarea{font-size:12px;font-family:ui-monospace,Consolas,monospace;resize:verti
 .tabs button[aria-current="page"]{color:var(--accent)}
 #toast{position:fixed;inset-inline:16px;bottom:calc(78px + env(safe-area-inset-bottom,0px));margin-inline:auto;max-width:420px;background:var(--ink);color:var(--bg);padding:11px 14px;border-radius:11px;text-align:center;font-size:14px;font-weight:600;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:6}
 #toast.show{opacity:1;transform:none}
+.livepill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;max-width:52vw;overflow:hidden;white-space:nowrap}
+.ld{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;display:inline-block}
+.on .ld{background:var(--pos);box-shadow:0 0 0 3px var(--pos-soft)}
+.offline .ld{background:var(--gold)}
+.error .ld{background:var(--neg)}
+.livest{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)}
+.check{display:flex;gap:8px;align-items:center;font-size:14px}
+.check input{width:auto}
+form.grid{display:grid;gap:10px}
+.grouplist{display:grid}
+.grow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-block:8px;border-top:1px solid var(--line)}
+.grow > span:first-child{flex:1 1 120px;font-weight:600}
+.grow small{color:var(--muted)}
+.chip.live{background:var(--pos-soft);color:var(--pos)}
 @media (max-width:420px){
   .teamsel{grid-template-columns:1fr}
   .score{font-size:23px}
@@ -219,7 +233,7 @@ textarea{font-size:12px;font-family:ui-monospace,Consolas,monospace;resize:verti
 <div id="app" dir="rtl" lang="ar">
   <header class="top">
     <div class="brand">دفتر الشدّة</div>
-    <div class="suits" aria-hidden="true">♠<span class="r">♥</span><span class="r">♦</span>♣</div>
+    <div id="livepill"></div>
   </header>
   <main id="main"></main>
 </div>
@@ -344,9 +358,151 @@ function load(){
   catch(e){storageOk=false}
   return demoState();
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));storageOk=true}catch(e){storageOk=false}}
-let S=load();
+function save(){
+  if(G.active){saveCur();syncLive();return}
+  try{localStorage.setItem(KEY,JSON.stringify(S));storageOk=true}catch(e){storageOk=false}
+}
+let S={v:1,players:[],games:[],current:null,demo:false};
 let tab='game',nf=null,drafts={},confirmKey=null,editing=null,statType='all',importText='';
+
+/* ---------- live sharing (Firebase) ----------
+   A group lives at groups/{gid} (name, owner, players) with games in
+   groups/{gid}/games. Everyone with the group id can read; only the owner
+   and devices that joined with the edit key can write (see firestore.rules). */
+const FB_CONFIG={apiKey:"AIzaSyAIy0j4AvhQmEfWOVGXlrTkVfaX68CKwOE",authDomain:"cards-10ada.firebaseapp.com",projectId:"cards-10ada",storageBucket:"cards-10ada.firebasestorage.app",messagingSenderId:"1065417727377",appId:"1:1065417727377:web:fcf5afd9b13519871ace30"};
+const FB_BASE='https://www.gstatic.com/firebasejs/10.14.1/';
+const GKEY='shadda.groups';
+function loadGroups(){try{const g=JSON.parse(localStorage.getItem(GKEY));if(g&&g.list)return g}catch(e){}return{active:null,list:{}}}
+function saveGroups(){try{localStorage.setItem(GKEY,JSON.stringify(G))}catch(e){}}
+let G=loadGroups(),live=null,fbDb=null,follow=true,busy=false,groupErr='',renderPending=false;
+const canEdit=()=>!G.active||!!(live&&live.role==='editor');
+const byNew=(a,b)=>b.createdAt-a.createdAt;
+function rid(n){const a='abcdefghijkmnpqrstuvwxyz23456789',b=new Uint8Array(n);crypto.getRandomValues(b);return Array.from(b,x=>a[x%a.length]).join('')}
+function parseLink(t){const m=String(t||'').match(/#g-([a-z0-9]{6,20})(?:-([a-z0-9]{8,40}))?/i);return m?{gid:m[1].toLowerCase(),key:m[2]?m[2].toLowerCase():null}:null}
+const appBase=()=>location.href.split('#')[0];
+const viewLink=gid=>appBase()+'#g-'+gid;
+const editLink=(gid,key)=>appBase()+'#g-'+gid+'-'+key;
+function fbMsg(e){
+  const c=(e&&e.code)||'';
+  if(c==='auth/operation-not-allowed'||c==='auth/admin-restricted-operation'||c==='auth/configuration-not-found')return'الدخول المجهول غير مفعّل في Firebase (Authentication ← Sign-in method ← Anonymous).';
+  if(c==='permission-denied')return'قواعد Firestore رفضت العملية — تأكد من نسخ القواعد كما هي.';
+  if(c==='auth/unauthorized-domain')return'نطاق الموقع غير مسموح في Firebase (Authentication ← Settings ← Authorized domains).';
+  if(c==='auth/network-request-failed'||c==='unavailable')return'لا يوجد اتصال بالإنترنت.';
+  return'تعذّر الاتصال بخدمة المشاركة'+(c?' ('+c+')':'')+'.';
+}
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('script'));document.head.appendChild(s)})}
+let fbReady=null;
+function initFirebase(){
+  if(fbReady)return fbReady;
+  fbReady=(async()=>{
+    if(!window.firebase)await loadScript(FB_BASE+'firebase-app-compat.js');
+    await Promise.all([loadScript(FB_BASE+'firebase-auth-compat.js'),loadScript(FB_BASE+'firebase-firestore-compat.js')]);
+    if(!firebase.apps.length)firebase.initializeApp(FB_CONFIG);
+    const db=firebase.firestore();
+    try{await db.enablePersistence({synchronizeTabs:true})}catch(e){}
+    const auth=firebase.auth();
+    let user=await new Promise(r=>{const u=auth.onAuthStateChanged(x=>{u();r(x)})}),authErr=null;
+    if(!user){try{user=(await auth.signInAnonymously()).user}catch(e){authErr=e}}
+    return{db,uid:user?user.uid:null,authErr};
+  })();
+  fbReady.catch(()=>{fbReady=null});
+  return fbReady;
+}
+function saveCur(){try{localStorage.setItem('shadda.cur.'+G.active,S.current||'')}catch(e){}}
+function stopLive(){if(live)live.unsub.forEach(u=>{try{u()}catch(e){}});live=null}
+function softRender(){
+  const a=document.activeElement;
+  if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&$('#main').contains(a)){renderPending=true;return}
+  render();
+}
+function connect(gid){
+  stopLive();
+  let cur=null;try{cur=localStorage.getItem('shadda.cur.'+gid)||null}catch(e){}
+  S={v:1,players:[],games:[],current:cur,demo:false};
+  nf=null;drafts={};follow=true;confirmKey=null;
+  const known=G.list[gid]||{};
+  const me=live={gid,status:'connecting',role:known.key?'editor':'viewer',name:known.name||'',unsub:[],synced:{games:{},players:null},err:'',loaded:false};
+  render();
+  setTimeout(()=>{if(live===me&&!me.loaded&&me.status!=='error'){me.status='offline';me.err='لم يصل رد من قاعدة البيانات — تحقق من الإنترنت. ستستمر المحاولة تلقائياً.';render()}},12000);
+  initFirebase().then(f=>{
+    if(live!==me)return;
+    fbDb=f.db;
+    const gref=f.db.collection('groups').doc(gid);
+    if(known.key&&!f.uid){me.role='viewer';toast(fbMsg(f.authErr))}
+    if(known.key&&f.uid){
+      const ed=gref.collection('editors').doc(f.uid);
+      ed.get().then(s=>s.exists?null:ed.set({key:known.key})).catch(e=>{
+        if(live!==me||!e||e.code!=='permission-denied')return;
+        me.role='viewer';delete G.list[gid].key;saveGroups();render();
+        toast('رابط التعديل غير صالح — أنت في وضع المشاهدة');
+      });
+    }
+    me.unsub.push(gref.onSnapshot({includeMetadataChanges:true},s=>{
+      if(live!==me)return;
+      if(!s.exists){if(!s.metadata.fromCache){me.status='error';me.err='لم نجد هذه المجموعة — تأكد من الرابط.';render()}return}
+      const d=s.data();
+      me.name=d.name||'';
+      if(d.owner===f.uid)me.role='editor';
+      if(G.list[gid]&&G.list[gid].name!==me.name){G.list[gid].name=me.name;saveGroups()}
+      S.players=d.players||[];me.synced.players=JSON.stringify(S.players);
+      me.status=s.metadata.fromCache?'offline':'on';me.loaded=true;me.err='';
+      softRender();
+    },e=>{if(live!==me)return;me.status='error';me.err=fbMsg(e);render()}));
+    me.unsub.push(gref.collection('games').onSnapshot(qs=>{
+      if(live!==me)return;
+      S.games=qs.docs.map(d=>d.data());
+      me.synced.games=Object.fromEntries(S.games.map(g=>[g.id,JSON.stringify(g)]));
+      softRender();
+    },e=>{if(live!==me)return;me.status='error';me.err=fbMsg(e);render()}));
+  }).catch(e=>{if(live!==me)return;me.status='error';me.err=fbMsg(e);render()});
+}
+function syncLive(){
+  if(!live||!fbDb||live.role!=='editor'||!live.loaded)return;
+  const gref=fbDb.collection('groups').doc(live.gid),sy=live.synced;
+  const fail=e=>toast('لم يُحفظ التغيير على الإنترنت: '+fbMsg(e));
+  const pj=JSON.stringify(S.players);
+  if(pj!==sy.players){sy.players=pj;gref.update({players:JSON.parse(pj)}).catch(fail)}
+  const seen=new Set();
+  S.games.forEach(g=>{
+    seen.add(g.id);const j=JSON.stringify(g);
+    if(sy.games[g.id]!==j){sy.games[g.id]=j;gref.collection('games').doc(g.id).set(JSON.parse(j)).catch(fail)}
+  });
+  Object.keys(sy.games).forEach(id=>{if(!seen.has(id)){delete sy.games[id];gref.collection('games').doc(id).delete().catch(fail)}});
+}
+async function createGroup(name,migrate){
+  if(!navigator.onLine){groupErr='تحتاج اتصالاً بالإنترنت لإنشاء مجموعة.';render();return}
+  busy=true;groupErr='';render();
+  try{
+    const f=await initFirebase();
+    if(!f.uid)throw f.authErr;
+    const gid=rid(10),key=rid(16),gref=f.db.collection('groups').doc(gid);
+    const players=migrate?S.players:[],games=migrate?S.games:[];
+    await gref.set({name,owner:f.uid,createdAt:Date.now(),players:JSON.parse(JSON.stringify(players))});
+    await gref.collection('private').doc('key').set({key});
+    for(let i=0;i<games.length;i+=400){
+      const b=f.db.batch();
+      games.slice(i,i+400).forEach(g=>b.set(gref.collection('games').doc(g.id),JSON.parse(JSON.stringify(g))));
+      await b.commit();
+    }
+    G.list[gid]={name,key};G.active=gid;saveGroups();
+    history.replaceState(null,'',viewLink(gid));
+    busy=false;tab='players';connect(gid);
+    toast('أُنشئت المجموعة — شارك رابط المشاهدة');
+  }catch(e){busy=false;groupErr=fbMsg(e);render()}
+}
+function joinLink(text){
+  const p=parseLink(text);
+  if(!p){toast('هذا ليس رابط مجموعة صالحاً');return}
+  G.list[p.gid]=Object.assign(G.list[p.gid]||{name:''},p.key?{key:p.key}:{});
+  G.active=p.gid;saveGroups();
+  history.replaceState(null,'',viewLink(p.gid));
+  tab='game';connect(p.gid);
+}
+function leaveGroup(){
+  stopLive();G.active=null;saveGroups();
+  history.replaceState(null,'',appBase());
+  S=load();nf=null;drafts={};confirmKey=null;tab='players';render();
+}
 
 const game=id=>S.games.find(g=>g.id===id);
 const playerName=id=>{const p=S.players.find(p=>p.id===id);return p?p.name:null};
@@ -385,13 +541,14 @@ function confirmBtn(key,label,act,attrs,plain){
   return`<button class="ghost${plain?'':' danger'}" data-act="ask" data-key="${key}">${label}</button>`;
 }
 function gameHead(g,label,sub){
-  return`<section class="gamehead"><div><span><span class="chip">${label}</span></span><h2>${teamName(g,0)} <span class="vs">ضد</span> ${teamName(g,1)}</h2><p class="sub">${sub}</p></div><button class="ghost" data-act="newgame">+ لعبة جديدة</button></section>`;
+  return`<section class="gamehead"><div><span><span class="chip">${label}</span></span><h2>${teamName(g,0)} <span class="vs">ضد</span> ${teamName(g,1)}</h2><p class="sub">${sub}</p></div>${canEdit()?'<button class="ghost" data-act="newgame">+ لعبة جديدة</button>':follow?'<span class="chip live">مباشر</span>':'<button class="ghost" data-act="follow">تابع اللعبة الجارية</button>'}</section>`;
 }
 function winBanner(g){
   const title=g.winner===-1?'تعادل!':`فاز ${teamName(g,g.winner)}`;
-  return`<section class="card win"><div class="suits" aria-hidden="true">♠<span class="r">♥</span><span class="r">♦</span>♣</div><h2>${title}</h2><button class="btn sm" data-act="rematch">لعبة جديدة بنفس الفرق</button></section>`;
+  return`<section class="card win"><div class="suits" aria-hidden="true">♠<span class="r">♥</span><span class="r">♦</span>♣</div><h2>${title}</h2>${canEdit()?'<button class="btn sm" data-act="rematch">لعبة جديدة بنفس الفرق</button>':''}</section>`;
 }
 function gameFoot(g){
+  if(!canEdit())return'';
   const n=(g.rounds||g.deals).length;
   return`<section class="foot">${n?confirmBtn('undo','تراجع عن آخر جولة','undo','',true):'<span></span>'}${confirmBtn('delgame','احذف اللعبة','delgame')}</section>`;
 }
@@ -455,7 +612,7 @@ function viewTarneeb(g){
   let h=gameHead(g,'طرنيب 41',done?`انتهت بعد ${n} جولات · ${fdate(g.createdAt)}`:`الجولة ${n+1} · التوزيع على ${esc(pname(g,n%4))}`);
   if(done)h+=winBanner(g);
   h+=`<section class="teams">${tTeam(g,0,sc)}${tTeam(g,1,sc)}</section>`;
-  if(!done){const st=tStatus(g,sc);if(st)h+=`<p class="status">${st}</p>`;h+=tEntry(g,sc,rules)}
+  if(!done){const st=tStatus(g,sc);if(st)h+=`<p class="status">${st}</p>`;if(canEdit())h+=tEntry(g,sc,rules)}
   return h+tTable(g)+gameFoot(g);
 }
 
@@ -502,11 +659,20 @@ function viewTrex(g){
   if(done)h+=winBanner(g);
   h+=`<section class="teams">${[0,1].map(t=>`<div class="team t${t}${g.winner===t?' won':''}"><div class="tlabel">${t?'الفريق الثاني':'الفريق الأول'}${g.winner===t?' · فائز':''}</div>${N(team[t],false,'score big'+(team[t]<0?' neg':''))}${[t,t+2].map(s=>`<div class="pl sm"><span class="nm">${esc(pname(g,s))}</span>${N(tot[s],false,'score'+(tot[s]<0?' neg':''))}</div>`).join('')}</div>`).join('')}</section>`;
   h+=xKingdoms(g,done);
-  if(!done)h+=xEntry(g,owner,k);
+  if(!done&&canEdit())h+=xEntry(g,owner,k);
   return h+xTable(g)+gameFoot(g);
 }
-function viewGame(){
+function currentGame(){
+  if(G.active&&!canEdit()&&follow){const gs=S.games.slice().sort(byNew);return gs.find(g=>g.status==='active')||gs[0]||null}
   const g=game(S.current);
+  if(g)return g;
+  if(G.active&&S.current!=='new')return S.games.filter(g=>g.status==='active').sort(byNew)[0]||null;
+  return null;
+}
+function viewGame(){
+  if(live&&!live.loaded)return`<section class="card empty"><p class="livest ${live.status}"><span class="ld"></span>${live.err?esc(live.err):'جارٍ تحميل المجموعة…'}</p></section>`;
+  const g=currentGame();
+  if(!g&&!canEdit())return`<section class="card empty"><h2>لا توجد لعبة جارية</h2><p class="note">ستظهر النتائج هنا مباشرة حين يبدأ المسجّل لعبة. الألعاب السابقة في «السجل».</p></section>`;
   if(!g)return viewNew();
   return g.type==='tarneeb'?viewTarneeb(g):viewTrex(g);
 }
@@ -560,28 +726,50 @@ function viewStats(){
   return h;
 }
 
+function viewShare(){
+  if(!G.active){
+    const known=Object.entries(G.list);
+    return`<section class="card"><h2>المشاركة المباشرة</h2><p class="note">أنشئ مجموعة ليتابع أصدقاؤك النتائج مباشرة على هواتفهم. أنت تسجّل النتائج، والباقون يشاهدون.</p>
+    ${groupErr?`<p class="warn">${esc(groupErr)}</p>`:''}
+    <form data-form="mkgroup" class="grid"><label class="field"><span>اسم المجموعة</span><input id="gname" maxlength="30" placeholder="مثلاً: شلة الخميس" autocomplete="off"></label>
+    ${!S.demo&&(S.games.length||S.players.length)?'<label class="check"><input type="checkbox" id="gmigrate" checked> انقل لاعبيّ وألعابي الحالية إلى المجموعة</label>':''}
+    <button class="btn"${busy?' disabled':''}>${busy?'جارٍ الإنشاء…':'أنشئ مجموعة'}</button></form>
+    <form data-form="join" class="inline"><input id="glink" placeholder="أو ألصق رابط مجموعة" dir="ltr" autocomplete="off"><button class="ghost">انضم</button></form>
+    ${known.length?`<div class="grouplist"><h3>مجموعات على هذا الجهاز</h3>${known.map(([id,x])=>`<div class="grow"><span>${esc(x.name||id)}</span><small>${x.key?'مسجّل':'مشاهد'}</small><button class="ghost sm" data-act="opengroup" data-id="${id}">افتح</button>${confirmBtn('forget-'+id,'إزالة','forget',`data-id="${id}"`)}</div>`).join('')}</div>`:''}
+    </section>`;
+  }
+  const key=G.list[G.active]&&G.list[G.active].key;
+  const st={connecting:'جارٍ الاتصال…',on:'متصل — التحديث مباشر',offline:live.loaded?'غير متصل — ستُرسل التغييرات عند عودة الإنترنت':live.err,error:live.err}[live.status];
+  return`<section class="card"><div class="cardhead"><h2>${esc(live.name||'المجموعة')}</h2><span class="rule">${live.role==='editor'?'أنت المسجّل':'مشاهدة فقط'}</span></div>
+  <p class="livest ${live.status}"><span class="ld"></span>${esc(st)}</p>
+  <label class="field"><span>رابط المشاهدة — أرسله لكل الأصدقاء</span><span class="inline"><input readonly dir="ltr" id="lnkv" value="${esc(viewLink(G.active))}"><button type="button" class="ghost" data-act="copylink" data-t="lnkv">انسخ</button></span></label>
+  ${key&&live.role==='editor'?`<label class="field"><span>رابط التسجيل — لك وحدك، لا ترسله إلا لمن يسجّل النتائج</span><span class="inline"><input readonly dir="ltr" id="lnke" value="${esc(editLink(G.active,key))}"><button type="button" class="ghost" data-act="copylink" data-t="lnke">انسخ</button></span></label>`:''}
+  <div class="row"><button class="ghost" data-act="leavegroup">الخروج إلى بيانات هذا الجهاز</button></div></section>`;
+}
 function viewPlayers(){
   const count=id=>S.games.filter(g=>g.seats.includes(id)).length;
-  return`<section class="card"><h2>اللاعبون</h2><p class="note">قائمة المجموعة الثابتة — تُبنى عليها الإحصاءات.</p>
+  if(!canEdit())return viewShare()+`<section class="card"><h2>اللاعبون</h2>${S.players.length?`<ul class="plist">${S.players.map(p=>`<li><span class="nm">${esc(p.name)}</span><span class="pgames">${count(p.id)} لعبة</span></li>`).join('')}</ul>`:'<p class="note">لا يوجد لاعبون بعد.</p>'}</section>`;
+  return viewShare()+`<section class="card"><h2>اللاعبون</h2><p class="note">قائمة المجموعة الثابتة — تُبنى عليها الإحصاءات.</p>
   <form data-form="addp" class="inline"><input id="newp2" placeholder="اسم اللاعب" maxlength="24" autocomplete="off"><button class="btn sm">أضف</button></form>
   ${S.players.length?`<ul class="plist">${S.players.map(p=>editing===p.id
     ?`<li><form data-form="rename" data-id="${p.id}" class="inline"><input id="ren-${p.id}" value="${esc(p.name)}" maxlength="24" autocomplete="off"><button class="btn sm">حفظ</button><button type="button" class="ghost" data-act="cancelEdit">إلغاء</button></form></li>`
     :`<li><span class="nm">${esc(p.name)}</span><span class="pgames">${count(p.id)} لعبة</span><button class="ghost sm" data-act="edit" data-id="${p.id}">تعديل</button>${confirmBtn('delp-'+p.id,'حذف','delp',`data-id="${p.id}"`)}</li>`).join('')}</ul>`:'<p class="note">لا يوجد لاعبون بعد.</p>'}
   </section>
-  <section class="card"><h2>نقل البيانات والنسخ الاحتياطي</h2>
+  ${G.active?'':`<section class="card"><h2>نقل البيانات والنسخ الاحتياطي</h2>
   <p class="note">تُحفظ البيانات في هذا المتصفح على هذا الجهاز. لنقلها إلى هاتف صديق أو لحفظ نسخة: انسخ البيانات وأرسلها، ثم ألصقها في خانة الاستيراد على الجهاز الآخر.</p>
   <div class="row"><button class="btn sm" data-act="copy">انسخ البيانات</button></div>
   <label class="field"><span>استيراد: ألصق النص هنا أو اختر ملفاً</span><textarea id="importText" rows="4" dir="ltr" spellcheck="false">${esc(importText)}</textarea></label>
   <input type="file" id="importFile" accept=".json,.txt,application/json,text/plain" aria-label="اختر ملف بيانات">
   <div class="row">${confirmBtn('import','استبدل بياناتي بالمستوردة','import','',true)}${confirmBtn('reset','امسح كل البيانات','reset')}</div>
-  </section>`;
+  </section>`}`;
 }
 
 function render(){
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===tab?'page':'false'));
   let h='';
   if(!storageOk)h+=`<div class="banner"><p>المتصفح لا يسمح بالحفظ هنا، لذا ستضيع البيانات عند الإغلاق. انسخ البيانات من قسم «اللاعبون» قبل الخروج.</p></div>`;
-  if(S.demo)h+=`<div class="banner"><p>هذه <b>بيانات تجريبية</b> لتتعرّف على الدفتر: لاعبون وألعاب وهمية.</p><button class="btn sm" data-act="demoClear">امسحها وابدأ</button><button class="ghost" data-act="demoKeep">أبقِها الآن</button></div>`;
+  $('#livepill').innerHTML=G.active&&live?`<button class="livepill ${live.status}" data-act="tab" data-tab="players"><span class="ld"></span>${esc(live.name||'مجموعة')}</button>`:'<div class="suits" aria-hidden="true">♠<span class="r">♥</span><span class="r">♦</span>♣</div>';
+  if(S.demo&&!G.active)h+=`<div class="banner"><p>هذه <b>بيانات تجريبية</b> لتتعرّف على الدفتر: لاعبون وألعاب وهمية.</p><button class="btn sm" data-act="demoClear">امسحها وابدأ</button><button class="ghost" data-act="demoKeep">أبقِها الآن</button></div>`;
   h+=tab==='game'?viewGame():tab==='history'?viewHistory():tab==='stats'?viewStats():viewPlayers();
   $('#main').innerHTML=h;
 }
@@ -609,16 +797,27 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]');
   if(!el||el.disabled)return;
   wake();
-  const a=el.dataset.act,ds=el.dataset,g=game(S.current);
+  const a=el.dataset.act,ds=el.dataset,g=currentGame();
+  if(!canEdit()&&['start','rematch','bid','made','saveRound','undo','delgame','pick','unpick','king','cnt','order','saveDeal','edit','delp','import','reset','demoClear','newgame'].includes(a)){toast('أنت في وضع المشاهدة');return}
+  renderPending=false;
   switch(a){
+    case'follow':follow=true;break;
+    case'copylink':{
+      const inp=document.getElementById(ds.t);
+      const manual=()=>{inp.focus();inp.select();toast('انسخ الرابط المحدد')};
+      try{navigator.clipboard.writeText(inp.value).then(()=>toast('نُسخ الرابط'),manual)}catch(err){manual()}
+      return}
+    case'leavegroup':leaveGroup();return;
+    case'opengroup':G.active=ds.id;saveGroups();history.replaceState(null,'',viewLink(ds.id));tab='game';connect(ds.id);return;
+    case'forget':delete G.list[ds.id];saveGroups();confirmKey=null;break;
     case'tab':tab=ds.tab;confirmKey=null;editing=null;render();window.scrollTo(0,0);return;
     case'ask':confirmKey=ds.key;break;
     case'cancel':confirmKey=null;break;
     case'type':nfGet().type=ds.v;break;
     case'start':{const f=nfGet();if(f.seats.every(Boolean)&&new Set(f.seats).size===4){newGame(f.type,f.seats.slice(),f.firstKing);toast('بالتوفيق!')}break}
-    case'newgame':S.current=null;confirmKey=null;save();render();window.scrollTo(0,0);return;
+    case'newgame':S.current=G.active?'new':null;confirmKey=null;save();render();window.scrollTo(0,0);return;
     case'rematch':if(g){newGame(g.type,g.seats.slice(),g.type==='trex'?(g.firstKing+1)%4:0);window.scrollTo(0,0)}break;
-    case'open':S.current=ds.id;tab='game';confirmKey=null;save();render();window.scrollTo(0,0);return;
+    case'open':S.current=ds.id;follow=false;tab='game';confirmKey=null;save();render();window.scrollTo(0,0);return;
     case'bid':drafts[g.id].bids[+ds.s]+=+ds.d;break;
     case'made':drafts[g.id].made[+ds.s]=ds.v==='1';break;
     case'saveRound':{
@@ -674,6 +873,9 @@ document.addEventListener('input',e=>{if(e.target.id==='importText')importText=e
 document.addEventListener('submit',e=>{
   e.preventDefault();
   const f=e.target;
+  if(f.dataset.form==='mkgroup'){const n=$('#gname').value.trim().replace(/\s+/g,' ')||'مجموعتنا',m=$('#gmigrate');createGroup(n,!!(m&&m.checked));return}
+  if(f.dataset.form==='join'){joinLink($('#glink').value);return}
+  if(!canEdit())return;
   if(f.dataset.form==='addp'){const id=f.querySelector('input').id;addPlayer(f);render();const i=document.getElementById(id);if(i)i.focus()}
   else if(f.dataset.form==='rename'){
     const name=f.querySelector('input').value.trim().replace(/\s+/g,' '),p=S.players.find(x=>x.id===f.dataset.id);
@@ -682,8 +884,14 @@ document.addEventListener('submit',e=>{
     p.name=name;editing=null;save();render();
   }
 });
+document.addEventListener('focusout',()=>{if(renderPending)setTimeout(()=>{if(renderPending){renderPending=false;render()}},400)});
+window.addEventListener('hashchange',()=>{const p=parseLink(location.hash);if(p&&(p.gid!==G.active||(p.key&&!(G.list[p.gid]||{}).key)))joinLink(location.hash)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&wl===null&&S.current)wake()});
 
-render();
+{
+  const p=parseLink(location.hash);
+  if(p){G.list[p.gid]=Object.assign(G.list[p.gid]||{name:''},p.key?{key:p.key}:{});G.active=p.gid;saveGroups();history.replaceState(null,'',viewLink(p.gid))}
+  if(G.active)connect(G.active);else{S=load();render()}
+}
 })();
 </script>
