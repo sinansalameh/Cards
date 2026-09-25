@@ -1,0 +1,692 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>دفتر الشدّة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Reem+Kufi:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F1F4F1; --surface:#FFFFFF; --sunk:#E6ECE8; --ink:#17211C; --muted:#5B6862; --line:#D6DED9;
+  --accent:#11694A; --accent-ink:#FFFFFF; --accent-soft:#DDEFE6;
+  --teamA:#11694A; --teamA-soft:#E3F1EA; --teamB:#9E4E1C; --teamB-soft:#F6E7DA;
+  --pos:#1B7443; --pos-soft:#D9F0E1; --neg:#B3261E; --neg-soft:#F8DEDB;
+  --gold:#8F6412; --gold-soft:#F6EBCF;
+  --r:14px;
+  --font:'IBM Plex Sans Arabic',system-ui,'Segoe UI',Tahoma,sans-serif;
+  --display:'Reem Kufi','IBM Plex Sans Arabic',Tahoma,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0D1411; --surface:#151F1A; --sunk:#1D2923; --ink:#E6EEE9; --muted:#97A79E; --line:#2A3831;
+  --accent:#43BD8B; --accent-ink:#05130D; --accent-soft:#183628;
+  --teamA:#43BD8B; --teamA-soft:#15291F; --teamB:#E59460; --teamB-soft:#2E2118;
+  --pos:#62CF92; --pos-soft:#173323; --neg:#F27B70; --neg-soft:#3A1B19;
+  --gold:#E6BA5A; --gold-soft:#342A14;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0D1411; --surface:#151F1A; --sunk:#1D2923; --ink:#E6EEE9; --muted:#97A79E; --line:#2A3831;
+  --accent:#43BD8B; --accent-ink:#05130D; --accent-soft:#183628;
+  --teamA:#43BD8B; --teamA-soft:#15291F; --teamB:#E59460; --teamB-soft:#2E2118;
+  --pos:#62CF92; --pos-soft:#173323; --neg:#F27B70; --neg-soft:#3A1B19;
+  --gold:#E6BA5A; --gold-soft:#342A14;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.55}
+#app{max-width:640px;margin:0 auto;padding-inline:16px;padding-block:0 calc(92px + env(safe-area-inset-bottom,0px))}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-block:18px 12px}
+.brand{font-family:var(--display);font-size:28px;font-weight:700;line-height:1.1}
+.suits{color:var(--muted);letter-spacing:.35em;font-size:15px;white-space:nowrap}
+.suits .r{color:var(--neg)}
+main{display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px;min-width:0}
+h2{font-family:var(--display);font-size:21px;font-weight:700;margin:0;line-height:1.35;text-wrap:balance}
+h3{font-size:15px;font-weight:700;margin:0}
+p{margin:0}
+.note{color:var(--muted);font-size:13.5px}
+.warn{color:var(--neg);font-size:13.5px}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.num{direction:ltr;unicode-bidi:isolate;display:inline-block;font-variant-numeric:tabular-nums}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:11px;padding:13px 18px;font-weight:700;width:100%}
+.btn:disabled{opacity:.38}
+.btn.sm{width:auto;padding:9px 16px}
+.ghost{background:transparent;border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-weight:600;font-size:14px}
+.ghost.sm{padding:5px 11px;font-size:13px}
+.ghost.danger{color:var(--neg)}
+.link{background:none;border:0;color:var(--accent);font-weight:600;padding:4px;font-size:13.5px;text-decoration:underline;text-underline-offset:3px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.confirm{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:14px;font-weight:600}
+.t0{--tc:var(--teamA);--ts:var(--teamA-soft)}
+.t1{--tc:var(--teamB);--ts:var(--teamB-soft)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--tc);margin-inline-end:6px;vertical-align:middle}
+
+/* banners */
+.banner{background:var(--gold-soft);border-radius:var(--r);padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.banner p{flex:1 1 220px;font-size:14px}
+.win{background:var(--gold-soft);border-color:transparent;text-align:center;justify-items:center;padding:20px 16px}
+.win h2{color:var(--gold);font-size:24px}
+
+/* game head */
+.gamehead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.gamehead > div{display:grid;gap:4px;min-width:0}
+.gamehead h2{font-size:19px}
+.vs{font-family:var(--font);font-size:14px;color:var(--muted);font-weight:500}
+.sub{color:var(--muted);font-size:13.5px}
+.gamehead .ghost{flex:none}
+
+/* team panels */
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.team{background:var(--ts);border-radius:var(--r);padding:12px 12px 10px;display:grid;gap:8px;align-content:start;min-width:0}
+.team.won{box-shadow:inset 0 0 0 2px var(--gold)}
+.tlabel{font-size:12px;font-weight:700;color:var(--tc);letter-spacing:.02em}
+.pl{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:3px 8px}
+.pl .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.score{font-weight:700;font-size:26px;line-height:1.1}
+.pl.sm .score{font-size:17px}
+.score.big{font-size:34px}
+.bar{grid-column:1/-1;height:6px;border-radius:3px;background:color-mix(in srgb,var(--tc) 18%,transparent);position:relative;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--tc);border-radius:3px}
+.bar::after{content:"";position:absolute;inset-block:0;inset-inline-start:73.17%;width:2px;background:var(--ts)}
+.conds{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--muted)}
+.conds .ok{color:var(--tc);font-weight:700}
+.status{background:var(--sunk);border-radius:10px;padding:10px 12px;font-size:13.5px}
+
+/* entry */
+.cardhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.rule{font-size:12.5px;font-weight:600;color:var(--muted);background:var(--sunk);border-radius:999px;padding:3px 10px}
+.brow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-block:10px;border-top:1px solid var(--line)}
+.who{flex:1 1 104px;display:grid;min-width:0}
+.who b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who b::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--tc);margin-inline-end:6px;vertical-align:middle}
+.who small{color:var(--muted);font-size:12px}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--surface)}
+.stepper button{width:42px;height:42px;border:0;background:var(--sunk);font-size:21px;font-weight:600;line-height:1}
+.stepper button:disabled{opacity:.3}
+.stepper output{min-width:42px;text-align:center;font-weight:700;font-size:19px}
+.seg{display:inline-flex;background:var(--sunk);border-radius:11px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;padding:8px 13px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.seg button.yes[aria-pressed="true"]{background:var(--pos-soft);color:var(--pos);box-shadow:none}
+.seg button.no[aria-pressed="true"]{background:var(--neg-soft);color:var(--neg);box-shadow:none}
+.seg.big{display:flex}
+.seg.big button{flex:1;padding:11px}
+.delta{min-width:44px;text-align:end;font-weight:700;font-size:16px}
+.sumline{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:12px;font-weight:600}
+.sumline b{font-size:18px}
+.msgs{margin:0;padding:0;list-style:none;color:var(--neg);font-size:13.5px;display:grid;gap:4px}
+
+/* trex */
+.krow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:9px 10px;border-radius:10px}
+.krow.cur{background:var(--accent-soft)}
+.kname{flex:0 0 96px;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kchips{display:flex;flex-wrap:wrap;gap:5px;flex:1 1 220px}
+.kc{font-size:12px;padding:2px 9px;border-radius:999px;border:1px dashed var(--line);color:var(--muted)}
+.kc.done{border-style:solid;background:var(--surface);color:var(--ink)}
+.kc.done .num{color:var(--accent);font-weight:700}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.ic{width:20px;height:20px;flex:none;vertical-align:middle}
+.ic-king,.ic-diamonds{color:var(--neg)}
+.ic-queens{color:var(--gold)}
+.ic-tricks{color:var(--ink)}
+.ic-trex{color:var(--accent)}
+.pick{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:11px 12px;text-align:start;display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:center}
+.pick .ic{grid-row:span 2;width:32px;height:32px;padding:5px;border-radius:9px;background:var(--sunk)}
+.cname{display:inline-flex;align-items:center;gap:8px}
+.cname .ic{width:26px;height:26px}
+.kc{display:inline-flex;align-items:center;gap:4px}
+.kc .ic{width:13px;height:13px}
+.kc:not(.done) .ic{opacity:.55}
+.cn .ic{width:16px;height:16px;margin-inline-end:5px;vertical-align:-3px}
+.pick:hover{border-color:var(--accent)}
+.pick b{font-size:15px}
+.pick small{color:var(--muted);font-size:12px}
+.cname{font-family:var(--display);font-size:18px}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pbtn{position:relative;border:1px solid transparent;background:var(--ts);border-radius:12px;padding:14px 10px;display:grid;gap:2px;justify-items:center;min-height:64px}
+.pbtn[aria-pressed="true"]{border-color:var(--tc);box-shadow:inset 0 0 0 1px var(--tc)}
+.rank{position:absolute;inset-block-start:6px;inset-inline-start:8px;width:22px;height:22px;border-radius:50%;background:var(--tc);color:var(--surface);font-size:12px;font-weight:700;display:grid;place-items:center}
+
+/* tables */
+.tablewrap{overflow-x:auto;margin-inline:-4px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 6px;text-align:center;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}
+td small{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap}
+td b.num{font-size:15px}
+.rn{color:var(--muted);width:28px}
+.cn{text-align:start;white-space:nowrap}
+tfoot td{font-weight:700;border-bottom:0;border-top:2px solid var(--line)}
+.zero{color:var(--line)}
+table.stat td,table.stat th{vertical-align:middle}
+.l{text-align:start}
+.pc{min-width:110px}
+.pbar{display:inline-block;width:56px;height:6px;border-radius:3px;background:var(--sunk);vertical-align:middle;margin-inline-end:6px;overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--accent)}
+
+/* forms */
+.teamsel{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tbox{background:var(--ts);border-radius:12px;padding:12px;display:grid;gap:10px;align-content:start}
+.tbox h3{color:var(--tc);font-size:13px}
+.field{display:grid;gap:4px}
+.field > span{font-size:12px;color:var(--muted);font-weight:600}
+select,input,textarea{font:inherit;padding:10px 11px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);width:100%;min-width:0}
+textarea{font-size:12px;font-family:ui-monospace,Consolas,monospace;resize:vertical}
+.inline{display:flex;gap:8px}
+.inline input{flex:1}
+.inline .btn,.inline .ghost{flex:none;width:auto}
+
+/* lists */
+.glist{display:grid;gap:10px}
+.gitem{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;text-align:start;display:grid;gap:6px;width:100%}
+.gitem:hover{border-color:var(--accent)}
+.gi-top{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted)}
+.gi-top .state{margin-inline-start:auto;font-weight:700}
+.gi-top .state.active{color:var(--accent)}
+.gi-team{display:flex;align-items:center;gap:6px;font-size:14px}
+.gi-team .nm{flex:1;min-width:0}
+.gi-team.won .nm{font-weight:700}
+.crown{font-size:11px;font-weight:700;color:var(--gold);background:var(--gold-soft);border-radius:999px;padding:1px 8px}
+.plist{list-style:none;margin:0;padding:0;display:grid}
+.plist li{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-block:10px;border-top:1px solid var(--line)}
+.plist li .nm{flex:1 1 120px;font-weight:600}
+.plist li form{flex:1 1 100%}
+.pgames{font-size:12.5px;color:var(--muted)}
+.foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between}
+.empty{text-align:center;justify-items:center;padding-block:28px}
+
+/* nav + toast */
+.tabs{position:fixed;inset-inline:0;bottom:0;z-index:5;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs div{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.tabs button{border:0;background:none;padding:9px 4px 11px;display:grid;justify-items:center;gap:1px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.tabs button i{font-style:normal;font-size:19px;line-height:1.2}
+.tabs button[aria-current="page"]{color:var(--accent)}
+#toast{position:fixed;inset-inline:16px;bottom:calc(78px + env(safe-area-inset-bottom,0px));margin-inline:auto;max-width:420px;background:var(--ink);color:var(--bg);padding:11px 14px;border-radius:11px;text-align:center;font-size:14px;font-weight:600;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:6}
+#toast.show{opacity:1;transform:none}
+@media (max-width:420px){
+  .teamsel{grid-template-columns:1fr}
+  .score{font-size:23px}
+  .score.big{font-size:28px}
+  .kname{flex-basis:100%}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div id="app" dir="rtl" lang="ar">
+  <header class="top">
+    <div class="brand">دفتر الشدّة</div>
+    <div class="suits" aria-hidden="true">♠<span class="r">♥</span><span class="r">♦</span>♣</div>
+  </header>
+  <main id="main"></main>
+</div>
+<nav class="tabs" dir="rtl" aria-label="الأقسام"><div>
+  <button data-act="tab" data-tab="game"><i aria-hidden="true">♠</i>اللعبة</button>
+  <button data-act="tab" data-tab="history"><i aria-hidden="true">♥</i>السجل</button>
+  <button data-act="tab" data-tab="stats"><i aria-hidden="true">♦</i>الإحصاءات</button>
+  <button data-act="tab" data-tab="players"><i aria-hidden="true">♣</i>اللاعبون</button>
+</div></nav>
+<div id="toast" role="status" aria-live="polite" dir="rtl"></div>
+
+<script>
+(function(){
+document.documentElement.lang='ar';
+document.documentElement.dir='rtl';
+
+const KEY='shadda.v1';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-4);
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const N=(x,signed,cls)=>`<span class="num${cls?' '+cls:''}">${x<0?'−'+Math.abs(x):(signed&&x>0?'+':'')+x}</span>`;
+
+const CONTRACTS=[
+  {k:'king',n:'ختيار الكبة',hint:'−75 لمن يأكله'},
+  {k:'queens',n:'بنات',hint:'−25 لكل بنت',total:4,per:-25,unit:'بنت'},
+  {k:'diamonds',n:'دينار',hint:'−10 لكل ورقة دينار',total:13,per:-10,unit:'ورقة دينار'},
+  {k:'tricks',n:'لطوش',hint:'−15 لكل لطشة',total:13,per:-15,unit:'لطشة'},
+  {k:'trex',n:'تركس',hint:'200 · 150 · 100 · 50'},
+];
+const CMAP=Object.fromEntries(CONTRACTS.map(c=>[c.k,c]));
+const ICONS={
+  king:'<path d="M3.5 7.5l4.5 4L12 4.5l4 7 4.5-4-2 11h-13z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 17.4l-2.7-2.6a1.55 1.55 0 0 1 2.7-1.6 1.55 1.55 0 0 1 2.7 1.6z" fill="currentColor"/>',
+  queens:'<path d="M4 18h16M5 18l-1-8.5 4.5 3.8L12 7l3.5 6.3L20 9.5 19 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/><circle cx="4" cy="8.3" r="1.5" fill="currentColor"/><circle cx="12" cy="5.4" r="1.5" fill="currentColor"/><circle cx="20" cy="8.3" r="1.5" fill="currentColor"/>',
+  diamonds:'<path d="M12 2.8l6.8 9.2L12 21.2 5.2 12z" fill="currentColor"/>',
+  tricks:'<rect x="4.5" y="5" width="10" height="14" rx="2" transform="rotate(-14 9.5 12)" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="9.5" y="4" width="10" height="14" rx="2" transform="rotate(8 14.5 11)" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/><path d="M14.3 8.6v5M11.8 11.1h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" transform="rotate(8 14.5 11)"/>',
+  trex:'<path d="M3 20h18M4 20v-6h5v6M9 20V8h6v12M15 20v-9h5v9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/><path d="M12 3.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L9.1 5.3l2-.3z" fill="currentColor"/>'
+};
+const ic=k=>`<svg class="ic ic-${k}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[k]}</svg>`;
+const TREX_PTS=[200,150,100,50];
+
+/* ---------- rules ---------- */
+function tDelta(b,made){const v=b*(b>=7?2:1);return made?v:-v}
+function tScores(g){const s=[0,0,0,0];g.rounds.forEach(r=>r.bids.forEach((b,i)=>s[i]+=tDelta(b,r.made[i])));return s}
+function tRules(sc){const in30=sc.filter(x=>x>=30).length;return{minBid:sc.map(x=>x>=40?4:x>=30?3:2),minSum:in30>=2?12:11}}
+function tQual(sc,t){return Math.max(sc[t],sc[t+2])>=41&&sc[t]>=0&&sc[t+2]>=0}
+/* Both teams qualifying in the same round starts extra rounds ("ot"):
+   after each extra round the team holding the single highest score wins. */
+function tResult(g){
+  const s=[0,0,0,0];let ot=false;
+  for(const r of g.rounds){
+    r.bids.forEach((b,i)=>s[i]+=tDelta(b,r.made[i]));
+    const a=Math.max(s[0],s[2]),b=Math.max(s[1],s[3]);
+    if(ot){if(a!==b)return{winner:a>b?0:1,ot}}
+    else{const q0=tQual(s,0),q1=tQual(s,1);if(q0&&q1)ot=true;else if(q0)return{winner:0,ot};else if(q1)return{winner:1,ot}}
+  }
+  return{winner:null,ot};
+}
+function tIssues(d,r){
+  const out=[],s=sum(d.bids);
+  if(s<r.minSum)out.push(`مجموع الطلبات ${s}، والمطلوب ${r.minSum} على الأقل${r.minSum===12?' (لاعبان أو أكثر تجاوزوا 30)':''}.`);
+  const ms=d.bids.reduce((a,b,i)=>a+(d.made[i]?b:0),0);
+  if(ms>13)out.push(`مجموع طلبات الناجحين ${ms}، ولا يمكن أن يتجاوز 13 أكلة.`);
+  return out;
+}
+function trexPts(c,d){
+  if(c==='king')return[0,1,2,3].map(s=>s===d.king?-75:0);
+  if(c==='trex'){const r=[0,0,0,0];d.order.forEach((s,i)=>r[s]=TREX_PTS[i]);return r}
+  return d.counts.map(x=>x*CMAP[c].per);
+}
+function xCheck(d){
+  const c=CMAP[d.contract];
+  if(!c)return'اختر اللعبة';
+  if(d.contract==='king')return d.king==null?'اختر من أكل ختيار الكبة.':'';
+  if(d.contract==='trex')return d.order.length<4?'رتّب اللاعبين الأربعة حسب إنهاء أوراقهم.':'';
+  const s=sum(d.counts);
+  return s!==c.total?`المجموع ${s} من ${c.total} — أكمل العدد.`:'';
+}
+function trexTotals(g){const s=[0,0,0,0];g.deals.forEach(d=>d.pts.forEach((p,i)=>s[i]+=p));return s}
+const kingOf=(g,k)=>(g.firstKing+k)%4;
+function finalize(g){
+  let w=null;
+  if(g.type==='tarneeb')w=tResult(g).winner;
+  else if(g.deals.length>=20){const t=trexTotals(g),a=t[0]+t[2],b=t[1]+t[3];w=a>b?0:b>a?1:-1}
+  if(w===null){g.status='active';g.winner=null;g.finishedAt=null}
+  else{g.status='done';g.winner=w;g.finishedAt=g.finishedAt||Date.now()}
+}
+
+/* ---------- demo data ---------- */
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function shuffle(a,r){for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function demoState(){
+  const P=['سنان','عبدالكريم','علي','ميسم'].map(n=>({id:uid(),name:n}));
+  const id=P.map(p=>p.id),names=Object.fromEntries(P.map(p=>[p.id,p.name])),now=Date.now();
+  const R=(b,m)=>({bids:b,made:m.map(Boolean)});
+  const t1={id:uid(),type:'tarneeb',createdAt:now-86400e3,seats:[id[0],id[1],id[2],id[3]],names,rounds:[
+    R([5,2,2,2],[1,0,1,1]),R([7,2,2,2],[1,1,1,0]),R([4,3,2,3],[1,1,1,1]),
+    R([7,2,2,2],[1,0,1,1]),R([3,4,2,3],[1,1,1,1]),R([3,3,3,2],[1,1,1,1])]};
+  const r=rng(11),deals=[];
+  for(let k=0;k<4;k++){
+    for(const c of shuffle(CONTRACTS.map(x=>x.k),r)){
+      const d={king:null,counts:[0,0,0,0],order:[]};
+      if(c==='king')d.king=Math.floor(r()*4);
+      else if(c==='trex')d.order=shuffle([0,1,2,3],r);
+      else for(let i=0;i<CMAP[c].total;i++)d.counts[Math.floor(r()*4)]++;
+      deals.push({owner:k,contract:c,data:d,pts:trexPts(c,d)});
+    }
+  }
+  const x1={id:uid(),type:'trex',createdAt:now-3*86400e3,seats:[id[0],id[2],id[3],id[1]],names,deals,firstKing:0};
+  const t2={id:uid(),type:'tarneeb',createdAt:now-40*60e3,seats:[id[0],id[3],id[1],id[2]],names,rounds:[
+    R([3,2,4,3],[1,1,0,1]),R([4,3,2,3],[1,1,1,1]),R([7,2,2,2],[1,0,1,1]),R([3,4,3,2],[1,1,1,0])]};
+  [t1,x1,t2].forEach(finalize);
+  t1.finishedAt=t1.createdAt+50*60e3; x1.finishedAt=x1.createdAt+70*60e3;
+  return{v:1,players:P,games:[x1,t1,t2],current:t2.id,demo:true};
+}
+
+/* ---------- state ---------- */
+let storageOk=true;
+function load(){
+  try{const raw=localStorage.getItem(KEY);if(raw){const d=JSON.parse(raw);if(d&&Array.isArray(d.players)&&Array.isArray(d.games))return d}}
+  catch(e){storageOk=false}
+  return demoState();
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));storageOk=true}catch(e){storageOk=false}}
+let S=load();
+let tab='game',nf=null,drafts={},confirmKey=null,editing=null,statType='all',importText='';
+
+const game=id=>S.games.find(g=>g.id===id);
+const playerName=id=>{const p=S.players.find(p=>p.id===id);return p?p.name:null};
+const pname=(g,s)=>playerName(g.seats[s])||g.names[g.seats[s]]||'؟';
+const nameOf=(id,g)=>playerName(id)||(g&&g.names[id])||'لاعب محذوف';
+const teamName=(g,t)=>`${esc(pname(g,t))} و${esc(pname(g,t+2))}`;
+function fdate(ts){try{return new Date(ts).toLocaleDateString('ar-u-nu-latn',{weekday:'short',day:'numeric',month:'short'})}catch(e){return new Date(ts).toDateString()}}
+
+function nfGet(){
+  const ids=S.players.map(p=>p.id);
+  if(!nf){
+    const last=S.games.slice().sort((a,b)=>b.createdAt-a.createdAt)[0];
+    let seats=last?last.seats.filter(i=>ids.includes(i)):[];
+    if(seats.length!==4)seats=ids.slice(0,4);
+    while(seats.length<4)seats.push('');
+    nf={type:last?last.type:'tarneeb',seats,firstKing:0};
+  }
+  nf.seats=nf.seats.map(i=>ids.includes(i)?i:'');
+  return nf;
+}
+function tDraft(g,rules){
+  let d=drafts[g.id];
+  if(!d||d.n!==g.rounds.length)d=drafts[g.id]={n:g.rounds.length,bids:rules.minBid.slice(),made:[true,true,true,true]};
+  d.bids=d.bids.map((b,i)=>clamp(b,rules.minBid[i],13));
+  return d;
+}
+function xDraft(g){
+  let d=drafts[g.id];
+  if(!d||d.n!==g.deals.length)d=drafts[g.id]={n:g.deals.length,contract:null,king:null,counts:[0,0,0,0],order:[]};
+  return d;
+}
+
+/* ---------- shared bits ---------- */
+function confirmBtn(key,label,act,attrs,plain){
+  if(confirmKey===key)return`<span class="confirm"><span>متأكد؟</span><button class="ghost danger" data-act="${act}" ${attrs||''}>نعم، ${label}</button><button class="ghost" data-act="cancel">لا</button></span>`;
+  return`<button class="ghost${plain?'':' danger'}" data-act="ask" data-key="${key}">${label}</button>`;
+}
+function gameHead(g,label,sub){
+  return`<section class="gamehead"><div><span><span class="chip">${label}</span></span><h2>${teamName(g,0)} <span class="vs">ضد</span> ${teamName(g,1)}</h2><p class="sub">${sub}</p></div><button class="ghost" data-act="newgame">+ لعبة جديدة</button></section>`;
+}
+function winBanner(g){
+  const title=g.winner===-1?'تعادل!':`فاز ${teamName(g,g.winner)}`;
+  return`<section class="card win"><div class="suits" aria-hidden="true">♠<span class="r">♥</span><span class="r">♦</span>♣</div><h2>${title}</h2><button class="btn sm" data-act="rematch">لعبة جديدة بنفس الفرق</button></section>`;
+}
+function gameFoot(g){
+  const n=(g.rounds||g.deals).length;
+  return`<section class="foot">${n?confirmBtn('undo','تراجع عن آخر جولة','undo','',true):'<span></span>'}${confirmBtn('delgame','احذف اللعبة','delgame')}</section>`;
+}
+
+/* ---------- views ---------- */
+function viewNew(){
+  const f=nfGet(),chosen=f.seats.filter(Boolean),dup=new Set(chosen).size!==chosen.length,ok=chosen.length===4&&!dup;
+  const opt=sel=>`<option value="">اختر لاعباً</option>`+S.players.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name)}</option>`).join('');
+  const seat=(i,l)=>`<label class="field"><span>${l}</span><select id="seat${i}" data-in="seat" data-i="${i}">${opt(f.seats[i])}</select></label>`;
+  const need=4-S.players.length;
+  const active=S.games.filter(g=>g.status==='active').sort((a,b)=>b.createdAt-a.createdAt);
+  let h=`<section class="card"><h2>لعبة جديدة</h2>
+  <div class="seg big" role="group" aria-label="نوع اللعبة"><button data-act="type" data-v="tarneeb" aria-pressed="${f.type==='tarneeb'}">طرنيب 41</button><button data-act="type" data-v="trex" aria-pressed="${f.type==='trex'}">تركس شراكة</button></div>
+  <p class="note">${f.type==='tarneeb'
+    ?'كل لاعب يطلب لنفسه من 2 إلى 13، والطلب 7 وما فوق يُحسب مضاعفاً. مجموع الطلبات 11 على الأقل (12 إذا تجاوز لاعبان 30)، ومن وصل 30 يطلب 3 على الأقل، ومن وصل 40 يطلب 4 على الأقل. يفوز الفريق حين يصل أحد لاعبيه إلى 41 وشريكه ليس بالسالب. إذا وصل لاعبان من الفريقين إلى 41 في الجولة نفسها تستمر اللعبة جولة بجولة، ومن يكون الأعلى نقاطاً في نهاية الجولة يفوز.'
+    :'4 ممالك × 5 ألعاب = 20 جولة. نقاط الشريكين تُجمع للفريق، والفريق الأعلى مجموعاً في النهاية يفوز.'}</p>
+  ${need>0?`<p class="warn">أضف ${need} ${need===1?'لاعباً':'لاعبين'} على الأقل للبدء.</p>`:''}
+  <div class="teamsel"><div class="tbox t0"><h3>الفريق الأول</h3>${seat(0,'اللاعب الأول')}${seat(2,'شريكه (مقابله)')}</div>
+  <div class="tbox t1"><h3>الفريق الثاني</h3>${seat(1,'على يمين الأول')}${seat(3,'شريكه (مقابله)')}</div></div>
+  ${dup?'<p class="warn">اخترت اللاعب نفسه مرتين.</p>':''}
+  ${f.type==='trex'?`<label class="field"><span>المملكة الأولى لـ</span><select id="king1" data-in="king1">${[0,1,2,3].map(s=>`<option value="${s}"${s===f.firstKing?' selected':''}>${f.seats[s]?esc(playerName(f.seats[s])):'—'}</option>`).join('')}</select></label>`:''}
+  <form data-form="addp" class="inline"><input id="newp1" placeholder="اسم لاعب جديد" maxlength="24" autocomplete="off"><button class="ghost">أضف</button></form>
+  <button class="btn" data-act="start"${ok?'':' disabled'}>ابدأ اللعبة</button></section>`;
+  if(active.length)h+=`<section class="card"><h3>ألعاب جارية</h3><div class="glist">${active.map(gameItem).join('')}</div></section>`;
+  return h;
+}
+
+function tTeam(g,t,sc){
+  const top=Math.max(sc[t],sc[t+2]),pos=sc[t]>=0&&sc[t+2]>=0,won=g.winner===t;
+  return`<div class="team t${t}${won?' won':''}"><div class="tlabel">${t?'الفريق الثاني':'الفريق الأول'}${won?' · فائز':''}</div>
+  ${[t,t+2].map(s=>`<div class="pl"><span class="nm">${esc(pname(g,s))}</span>${N(sc[s],false,'score'+(sc[s]<0?' neg':''))}<div class="bar" aria-hidden="true"><i style="width:${clamp(sc[s],0,41)/41*100}%"></i></div></div>`).join('')}
+  <div class="conds"><span class="${top>=41?'ok':''}">${top>=41?'✓':'○'} <span class="num">41+</span></span><span class="${pos?'ok':''}">${pos?'✓':'○'} لا أحد بالسالب</span></div></div>`;
+}
+function tStatus(g,sc){
+  if(tResult(g).ot)return'وصل لاعبان من الفريقين إلى 41 في الجولة نفسها — اللعب مستمر جولة بجولة، ومن يكون الأعلى نقاطاً في نهاية الجولة يفوز.';
+  return[0,1].filter(t=>Math.max(sc[t],sc[t+2])>=41&&!(sc[t]>=0&&sc[t+2]>=0))
+    .map(t=>`${teamName(g,t)}: وصل أحدهما إلى 41 لكن رصيد شريكه بالسالب — اللعب مستمر.`).join('<br>');
+}
+function tEntry(g,sc,rules){
+  const d=tDraft(g,rules),s=sum(d.bids),issues=tIssues(d,rules);
+  const rows=[0,1,2,3].map(i=>{
+    const min=rules.minBid[i],b=d.bids[i],m=d.made[i];
+    return`<div class="brow t${i%2}"><div class="who"><b>${esc(pname(g,i))}</b><small>الرصيد ${N(sc[i])}${min>2?' · أقل طلب '+min:''}</small></div>
+    <div class="stepper"><button data-act="bid" data-s="${i}" data-d="1" aria-label="زيادة طلب ${esc(pname(g,i))}"${b>=13?' disabled':''}>+</button><output class="num">${b}</output><button data-act="bid" data-s="${i}" data-d="-1" aria-label="إنقاص طلب ${esc(pname(g,i))}"${b<=min?' disabled':''}>−</button></div>
+    <div class="seg"><button class="yes" data-act="made" data-s="${i}" data-v="1" aria-pressed="${m}">نجح</button><button class="no" data-act="made" data-s="${i}" data-v="0" aria-pressed="${!m}">انكسر</button></div>
+    ${N(tDelta(b,m),true,'delta '+(m?'pos':'neg'))}</div>`;
+  }).join('');
+  return`<section class="card"><div class="cardhead"><h3>تسجيل الجولة ${g.rounds.length+1}</h3><span class="rule">المجموع ≥ ${rules.minSum}</span></div>${rows}
+  <div class="sumline"><span>مجموع الطلبات</span><b class="num ${s>=rules.minSum?'pos':'neg'}">${s} / ${rules.minSum}</b></div>
+  ${issues.length?`<ul class="msgs">${issues.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}
+  <button class="btn" data-act="saveRound"${issues.length?' disabled':''}>سجّل الجولة</button></section>`;
+}
+function tTable(g){
+  if(!g.rounds.length)return'';
+  const order=[0,2,1,3],run=[0,0,0,0];
+  const rows=g.rounds.map((r,i)=>`<tr><td class="rn">${i+1}</td>${order.map(s=>{
+    const dl=tDelta(r.bids[s],r.made[s]);run[s]+=dl;
+    return`<td><b>${N(run[s],false,run[s]<0?'neg':'')}</b><small>${N(dl,true,r.made[s]?'pos':'neg')} · طلب ${r.bids[s]}</small></td>`;
+  }).join('')}</tr>`).join('');
+  return`<section class="card"><h3>سجل الجولات</h3><div class="tablewrap"><table><thead><tr><th class="rn">#</th>${order.map(s=>`<th class="t${s%2}"><span class="dot"></span>${esc(pname(g,s))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}
+function viewTarneeb(g){
+  const sc=tScores(g),rules=tRules(sc),done=g.status==='done',n=g.rounds.length;
+  let h=gameHead(g,'طرنيب 41',done?`انتهت بعد ${n} جولات · ${fdate(g.createdAt)}`:`الجولة ${n+1} · التوزيع على ${esc(pname(g,n%4))}`);
+  if(done)h+=winBanner(g);
+  h+=`<section class="teams">${tTeam(g,0,sc)}${tTeam(g,1,sc)}</section>`;
+  if(!done){const st=tStatus(g,sc);if(st)h+=`<p class="status">${st}</p>`;h+=tEntry(g,sc,rules)}
+  return h+tTable(g)+gameFoot(g);
+}
+
+function xKingdoms(g,done){
+  const cur=Math.floor(g.deals.length/5);
+  return`<section class="card"><h3>الممالك</h3><div>${[0,1,2,3].map(k=>{
+    const o=kingOf(g,k),used=g.deals.slice(k*5,k*5+5).map(d=>d.contract);
+    return`<div class="krow${!done&&k===cur?' cur':''}"><span class="kname t${o%2}"><span class="dot"></span>${esc(pname(g,o))}</span><span class="kchips">${CONTRACTS.map(c=>{const i=used.indexOf(c.k);return`<span class="kc${i>=0?' done':''}">${i>=0?`<span class="num">${i+1}</span>`:''}${ic(c.k)}${c.n}</span>`}).join('')}</span></div>`;
+  }).join('')}</div></section>`;
+}
+function xEntry(g,owner,k){
+  const d=xDraft(g),used=g.deals.slice(k*5).map(x=>x.contract);
+  let body;
+  if(!d.contract){
+    body=`<p class="note">${esc(pname(g,owner))} يختار اللعبة التالية:</p><div class="picks">${CONTRACTS.filter(c=>!used.includes(c.k)).map(c=>`<button class="pick" data-act="pick" data-c="${c.k}">${ic(c.k)}<b>${c.n}</b><small>${c.hint}</small></button>`).join('')}</div>`;
+  }else{
+    const c=CMAP[d.contract],pts=trexPts(d.contract,d),err=xCheck(d);
+    let inp;
+    if(d.contract==='king'){
+      inp=`<p class="note">من أكل ختيار الكبة؟</p><div class="pgrid">${[0,1,2,3].map(s=>`<button class="pbtn t${s%2}" data-act="king" data-s="${s}" aria-pressed="${d.king===s}"><b>${esc(pname(g,s))}</b>${d.king===s?N(-75,false,'neg'):''}</button>`).join('')}</div>`;
+    }else if(d.contract==='trex'){
+      inp=`<p class="note">اضغط على اللاعبين بترتيب إنهاء أوراقهم: الأول ثم الثاني… (اضغط مرة ثانية للتراجع).</p><div class="pgrid">${[0,1,2,3].map(s=>{const r=d.order.indexOf(s);return`<button class="pbtn t${s%2}" data-act="order" data-s="${s}" aria-pressed="${r>=0}">${r>=0?`<span class="rank">${r+1}</span>`:''}<b>${esc(pname(g,s))}</b>${r>=0?N(pts[s],true,'pos'):''}</button>`}).join('')}</div>`;
+    }else{
+      const s=sum(d.counts);
+      inp=`<p class="note">كم ${c.unit} أكل كل لاعب؟</p>${[0,1,2,3].map(i=>`<div class="brow t${i%2}"><div class="who"><b>${esc(pname(g,i))}</b></div>
+      <div class="stepper"><button data-act="cnt" data-s="${i}" data-d="1" aria-label="زيادة"${s>=c.total?' disabled':''}>+</button><output class="num">${d.counts[i]}</output><button data-act="cnt" data-s="${i}" data-d="-1" aria-label="إنقاص"${d.counts[i]<=0?' disabled':''}>−</button></div>
+      ${N(pts[i],false,'delta'+(pts[i]<0?' neg':''))}</div>`).join('')}
+      <div class="sumline"><span>المجموع</span><b class="num ${s===c.total?'pos':'neg'}">${s} / ${c.total}</b></div>`;
+    }
+    body=`<div class="cardhead"><b class="cname">${ic(d.contract)}${c.n}</b><button class="link" data-act="unpick">تغيير اللعبة</button></div>${inp}${err?`<ul class="msgs"><li>${err}</li></ul>`:''}<button class="btn" data-act="saveDeal"${err?' disabled':''}>سجّل ${c.n}</button>`;
+  }
+  return`<section class="card"><div class="cardhead"><h3>الجولة ${g.deals.length+1} من 20 · مملكة ${esc(pname(g,owner))}</h3><span class="rule"><span class="num">${used.length}/5</span></span></div>${body}</section>`;
+}
+function xTable(g){
+  if(!g.deals.length)return'';
+  const order=[0,2,1,3],tot=trexTotals(g);
+  const rows=g.deals.map((d,i)=>`<tr><td class="rn">${i+1}</td><td class="cn">${ic(d.contract)}${CMAP[d.contract].n}<small>مملكة ${esc(pname(g,d.owner))}</small></td>${order.map(s=>`<td>${d.pts[s]?N(d.pts[s],true,d.pts[s]<0?'neg':'pos'):'<span class="zero">·</span>'}</td>`).join('')}</tr>`).join('');
+  return`<section class="card"><h3>سجل الجولات</h3><div class="tablewrap"><table><thead><tr><th class="rn">#</th><th class="cn">اللعبة</th>${order.map(s=>`<th class="t${s%2}"><span class="dot"></span>${esc(pname(g,s))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td></td><td class="cn">المجموع</td>${order.map(s=>`<td>${N(tot[s],false,tot[s]<0?'neg':'')}</td>`).join('')}</tr></tfoot></table></div></section>`;
+}
+function viewTrex(g){
+  const tot=trexTotals(g),team=[tot[0]+tot[2],tot[1]+tot[3]],n=g.deals.length,done=g.status==='done';
+  const k=Math.min(3,Math.floor(n/5)),owner=kingOf(g,k);
+  let h=gameHead(g,'تركس شراكة',done?`انتهت الممالك الأربع · ${fdate(g.createdAt)}`:`الجولة ${n+1} من 20 · مملكة ${esc(pname(g,owner))}`);
+  if(done)h+=winBanner(g);
+  h+=`<section class="teams">${[0,1].map(t=>`<div class="team t${t}${g.winner===t?' won':''}"><div class="tlabel">${t?'الفريق الثاني':'الفريق الأول'}${g.winner===t?' · فائز':''}</div>${N(team[t],false,'score big'+(team[t]<0?' neg':''))}${[t,t+2].map(s=>`<div class="pl sm"><span class="nm">${esc(pname(g,s))}</span>${N(tot[s],false,'score'+(tot[s]<0?' neg':''))}</div>`).join('')}</div>`).join('')}</section>`;
+  h+=xKingdoms(g,done);
+  if(!done)h+=xEntry(g,owner,k);
+  return h+xTable(g)+gameFoot(g);
+}
+function viewGame(){
+  const g=game(S.current);
+  if(!g)return viewNew();
+  return g.type==='tarneeb'?viewTarneeb(g):viewTrex(g);
+}
+
+function gameItem(g){
+  const st=g.status==='done'?(g.winner===-1?'تعادل':'انتهت'):'جارية';
+  let score;
+  if(g.type==='tarneeb'){const sc=tScores(g);score=t=>`${N(sc[t],false,sc[t]<0?'neg':'')} · ${N(sc[t+2],false,sc[t+2]<0?'neg':'')}`}
+  else{const x=trexTotals(g);score=t=>N(x[t]+x[t+2],false,x[t]+x[t+2]<0?'neg':'')}
+  return`<button class="gitem" data-act="open" data-id="${g.id}"><div class="gi-top"><span class="chip">${g.type==='tarneeb'?'طرنيب 41':'تركس'}</span><span>${fdate(g.createdAt)}</span><span class="state ${g.status}">${st}</span></div>
+  ${[0,1].map(t=>`<div class="gi-team t${t}${g.winner===t?' won':''}"><span class="dot"></span><span class="nm">${teamName(g,t)}</span>${g.winner===t?'<span class="crown">فائز</span>':''}${score(t)}</div>`).join('')}</button>`;
+}
+function viewHistory(){
+  const gs=S.games.slice().sort((a,b)=>b.createdAt-a.createdAt);
+  if(!gs.length)return`<section class="card empty"><h2>السجل فارغ</h2><p class="note">ابدأ لعبة من قسم «اللعبة» وستظهر هنا.</p></section>`;
+  return`<section class="card"><h2>السجل</h2><p class="note">عدد الألعاب: ${gs.length} · اضغط على أي لعبة لفتحها.</p></section><div class="glist">${gs.map(gameItem).join('')}</div>`;
+}
+
+function viewStats(){
+  const pct=x=>x.n?Math.round(100*x.w/x.n):0;
+  const rank=o=>Object.values(o).sort((a,b)=>pct(b)-pct(a)||b.w-a.w||b.n-a.n);
+  const done=S.games.filter(g=>g.status==='done'&&(statType==='all'||g.type===statType));
+  const P={},pairs={};
+  done.forEach(g=>{
+    [0,1,2,3].forEach(s=>{const id=g.seats[s];const p=P[id]||(P[id]={name:esc(nameOf(id,g)),n:0,w:0});p.n++;if(g.winner===s%2)p.w++});
+    [0,1].forEach(t=>{const ids=[g.seats[t],g.seats[t+2]].sort(),key=ids.join('|');const q=pairs[key]||(pairs[key]={name:`${esc(nameOf(ids[0],g))} و${esc(nameOf(ids[1],g))}`,n:0,w:0});q.n++;if(g.winner===t)q.w++});
+  });
+  const winTable=(rows,label)=>`<div class="tablewrap"><table class="stat"><thead><tr><th class="l">${label}</th><th>لعب</th><th>فاز</th><th class="pc">نسبة الفوز</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="l">${r.name}</td><td>${N(r.n)}</td><td>${N(r.w)}</td><td class="pc"><span class="pbar"><i style="width:${pct(r)}%"></i></span><span class="num">${pct(r)}%</span></td></tr>`).join('')}</tbody></table></div>`;
+  let h=`<section class="card"><h2>الإحصاءات</h2><div class="seg big" role="group" aria-label="نوع اللعبة">${[['all','الكل'],['tarneeb','طرنيب'],['trex','تركس']].map(([v,l])=>`<button data-act="stat" data-v="${v}" aria-pressed="${statType===v}">${l}</button>`).join('')}</div><p class="note">الفوز محسوب من الألعاب المنتهية فقط (${done.length}).</p></section>`;
+  if(!done.length)h+=`<section class="card empty"><p class="note">لا توجد ألعاب منتهية بعد.</p></section>`;
+  else h+=`<section class="card"><h3>اللاعبون</h3>${winTable(rank(P),'اللاعب')}</section><section class="card"><h3>الثنائيات</h3>${winTable(rank(pairs),'الفريق')}</section>`;
+  if(statType!=='trex'){
+    const B={};
+    S.games.filter(g=>g.type==='tarneeb').forEach(g=>g.rounds.forEach(r=>r.bids.forEach((b,s)=>{
+      const id=g.seats[s];const x=B[id]||(B[id]={name:esc(nameOf(id,g)),n:0,w:0,max:0});
+      x.n++;if(r.made[s]){x.w++;x.max=Math.max(x.max,b)}
+    })));
+    const rows=rank(B);
+    if(rows.length)h+=`<section class="card"><h3>الطلبات في الطرنيب</h3><div class="tablewrap"><table class="stat"><thead><tr><th class="l">اللاعب</th><th>طلبات</th><th class="pc">نجاح الطلب</th><th>أعلى طلب ناجح</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="l">${r.name}</td><td>${N(r.n)}</td><td class="pc"><span class="pbar"><i style="width:${pct(r)}%"></i></span><span class="num">${pct(r)}%</span></td><td>${r.max?N(r.max):'—'}</td></tr>`).join('')}</tbody></table></div></section>`;
+  }
+  if(statType!=='tarneeb'){
+    const X={};
+    S.games.filter(g=>g.type==='trex').forEach(g=>{
+      const tot=trexTotals(g);
+      g.seats.forEach((id,s)=>{const x=X[id]||(X[id]={name:esc(nameOf(id,g)),n:0,pts:0,kings:0});if(g.status==='done'){x.n++;x.pts+=tot[s]}});
+      g.deals.forEach(d=>{if(d.contract==='king')X[g.seats[d.data.king]].kings++});
+    });
+    const rows=Object.values(X).sort((a,b)=>(b.n?b.pts/b.n:-1e9)-(a.n?a.pts/a.n:-1e9));
+    if(rows.length)h+=`<section class="card"><h3>التركس</h3><div class="tablewrap"><table class="stat"><thead><tr><th class="l">اللاعب</th><th>ألعاب منتهية</th><th>معدل النقاط</th><th>أكل ختيار الكبة</th></tr></thead><tbody>${rows.map(r=>{const avg=r.n?Math.round(r.pts/r.n):null;return`<tr><td class="l">${r.name}</td><td>${N(r.n)}</td><td>${avg===null?'—':N(avg,false,avg<0?'neg':'')}</td><td>${N(r.kings)}</td></tr>`}).join('')}</tbody></table></div></section>`;
+  }
+  return h;
+}
+
+function viewPlayers(){
+  const count=id=>S.games.filter(g=>g.seats.includes(id)).length;
+  return`<section class="card"><h2>اللاعبون</h2><p class="note">قائمة المجموعة الثابتة — تُبنى عليها الإحصاءات.</p>
+  <form data-form="addp" class="inline"><input id="newp2" placeholder="اسم اللاعب" maxlength="24" autocomplete="off"><button class="btn sm">أضف</button></form>
+  ${S.players.length?`<ul class="plist">${S.players.map(p=>editing===p.id
+    ?`<li><form data-form="rename" data-id="${p.id}" class="inline"><input id="ren-${p.id}" value="${esc(p.name)}" maxlength="24" autocomplete="off"><button class="btn sm">حفظ</button><button type="button" class="ghost" data-act="cancelEdit">إلغاء</button></form></li>`
+    :`<li><span class="nm">${esc(p.name)}</span><span class="pgames">${count(p.id)} لعبة</span><button class="ghost sm" data-act="edit" data-id="${p.id}">تعديل</button>${confirmBtn('delp-'+p.id,'حذف','delp',`data-id="${p.id}"`)}</li>`).join('')}</ul>`:'<p class="note">لا يوجد لاعبون بعد.</p>'}
+  </section>
+  <section class="card"><h2>نقل البيانات والنسخ الاحتياطي</h2>
+  <p class="note">تُحفظ البيانات في هذا المتصفح على هذا الجهاز. لنقلها إلى هاتف صديق أو لحفظ نسخة: انسخ البيانات وأرسلها، ثم ألصقها في خانة الاستيراد على الجهاز الآخر.</p>
+  <div class="row"><button class="btn sm" data-act="copy">انسخ البيانات</button></div>
+  <label class="field"><span>استيراد: ألصق النص هنا أو اختر ملفاً</span><textarea id="importText" rows="4" dir="ltr" spellcheck="false">${esc(importText)}</textarea></label>
+  <input type="file" id="importFile" accept=".json,.txt,application/json,text/plain" aria-label="اختر ملف بيانات">
+  <div class="row">${confirmBtn('import','استبدل بياناتي بالمستوردة','import','',true)}${confirmBtn('reset','امسح كل البيانات','reset')}</div>
+  </section>`;
+}
+
+function render(){
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===tab?'page':'false'));
+  let h='';
+  if(!storageOk)h+=`<div class="banner"><p>المتصفح لا يسمح بالحفظ هنا، لذا ستضيع البيانات عند الإغلاق. انسخ البيانات من قسم «اللاعبون» قبل الخروج.</p></div>`;
+  if(S.demo)h+=`<div class="banner"><p>هذه <b>بيانات تجريبية</b> لتتعرّف على الدفتر: لاعبون وألعاب وهمية.</p><button class="btn sm" data-act="demoClear">امسحها وابدأ</button><button class="ghost" data-act="demoKeep">أبقِها الآن</button></div>`;
+  h+=tab==='game'?viewGame():tab==='history'?viewHistory():tab==='stats'?viewStats():viewPlayers();
+  $('#main').innerHTML=h;
+}
+
+/* ---------- actions ---------- */
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),2800)}
+let wl=null;
+function wake(){try{if(!wl&&navigator.wakeLock&&document.visibilityState==='visible')navigator.wakeLock.request('screen').then(l=>{wl=l;l.addEventListener('release',()=>wl=null)}).catch(()=>{})}catch(e){}}
+function newGame(type,seats,firstKing){
+  const g={id:uid(),type,createdAt:Date.now(),seats,names:Object.fromEntries(seats.map(i=>[i,playerName(i)])),status:'active',winner:null,finishedAt:null};
+  if(type==='tarneeb')g.rounds=[];else{g.deals=[];g.firstKing=firstKing||0}
+  S.games.push(g);S.current=g.id;S.demo=false;save();
+}
+function resetAll(){S={v:1,players:[],games:[],current:null,demo:false};nf=null;drafts={};confirmKey=null;save()}
+function addPlayer(form){
+  const inp=form.querySelector('input'),name=inp.value.trim().replace(/\s+/g,' ');
+  if(!name){toast('اكتب اسم اللاعب أولاً');return}
+  if(S.players.some(p=>p.name===name)){toast('هذا الاسم موجود في القائمة');return}
+  const p={id:uid(),name};S.players.push(p);
+  if(tab==='game'&&!game(S.current)){const f=nfGet(),i=f.seats.findIndex(x=>!x);if(i>=0)f.seats[i]=p.id}
+  save();toast(`أُضيف ${name}`);
+}
+
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]');
+  if(!el||el.disabled)return;
+  wake();
+  const a=el.dataset.act,ds=el.dataset,g=game(S.current);
+  switch(a){
+    case'tab':tab=ds.tab;confirmKey=null;editing=null;render();window.scrollTo(0,0);return;
+    case'ask':confirmKey=ds.key;break;
+    case'cancel':confirmKey=null;break;
+    case'type':nfGet().type=ds.v;break;
+    case'start':{const f=nfGet();if(f.seats.every(Boolean)&&new Set(f.seats).size===4){newGame(f.type,f.seats.slice(),f.firstKing);toast('بالتوفيق!')}break}
+    case'newgame':S.current=null;confirmKey=null;save();render();window.scrollTo(0,0);return;
+    case'rematch':if(g){newGame(g.type,g.seats.slice(),g.type==='trex'?(g.firstKing+1)%4:0);window.scrollTo(0,0)}break;
+    case'open':S.current=ds.id;tab='game';confirmKey=null;save();render();window.scrollTo(0,0);return;
+    case'bid':drafts[g.id].bids[+ds.s]+=+ds.d;break;
+    case'made':drafts[g.id].made[+ds.s]=ds.v==='1';break;
+    case'saveRound':{
+      const rules=tRules(tScores(g)),d=tDraft(g,rules);
+      if(tIssues(d,rules).length)break;
+      g.rounds.push({bids:d.bids.slice(),made:d.made.slice()});delete drafts[g.id];
+      finalize(g);save();
+      toast(g.status==='done'?'انتهت اللعبة!':`سُجّلت الجولة ${g.rounds.length}`);break}
+    case'undo':if(g.type==='tarneeb')g.rounds.pop();else g.deals.pop();delete drafts[g.id];confirmKey=null;finalize(g);save();toast('أُلغيت آخر جولة');break;
+    case'delgame':S.games=S.games.filter(x=>x.id!==g.id);S.current=null;confirmKey=null;save();toast('حُذفت اللعبة');break;
+    case'pick':Object.assign(xDraft(g),{contract:ds.c,king:null,counts:[0,0,0,0],order:[]});break;
+    case'unpick':xDraft(g).contract=null;break;
+    case'king':xDraft(g).king=+ds.s;break;
+    case'cnt':{const d=xDraft(g),s=+ds.s,step=+ds.d,v=d.counts[s]+step;if(v<0||(step>0&&sum(d.counts)>=CMAP[d.contract].total))break;d.counts[s]=v;break}
+    case'order':{const d=xDraft(g),s=+ds.s,i=d.order.indexOf(s);if(i>=0)d.order.splice(i);else d.order.push(s);break}
+    case'saveDeal':{
+      const d=xDraft(g);if(xCheck(d))break;
+      const k=Math.floor(g.deals.length/5),data={king:d.king,counts:d.counts.slice(),order:d.order.slice()};
+      g.deals.push({owner:kingOf(g,k),contract:d.contract,data,pts:trexPts(d.contract,data)});
+      delete drafts[g.id];finalize(g);save();
+      toast(g.status==='done'?'انتهت اللعبة!':`سُجّل ${CMAP[d.contract].n}`);break}
+    case'edit':editing=ds.id;confirmKey=null;render();{const i=document.getElementById('ren-'+ds.id);if(i){i.focus();i.select()}}return;
+    case'cancelEdit':editing=null;break;
+    case'delp':S.players=S.players.filter(p=>p.id!==ds.id);confirmKey=null;save();toast('حُذف اللاعب — تبقى ألعابه في السجل');break;
+    case'stat':statType=ds.v;break;
+    case'copy':{
+      const txt=JSON.stringify(S);
+      const fallback=()=>{importText=txt;render();const t=$('#importText');if(t){t.focus();t.select()}toast('انسخ النص المحدد يدوياً')};
+      try{navigator.clipboard.writeText(txt).then(()=>toast('نُسخت البيانات — ألصقها في ملاحظة أو رسالة'),fallback)}catch(err){fallback()}
+      return}
+    case'import':{
+      confirmKey=null;
+      try{
+        const d=JSON.parse(importText);
+        if(!d||!Array.isArray(d.players)||!Array.isArray(d.games))throw 0;
+        S={v:1,players:d.players,games:d.games,current:d.current||null,demo:false};
+        nf=null;drafts={};importText='';save();toast('تم الاستيراد');
+      }catch(err){toast('النص ليس نسخة صالحة من الدفتر')}
+      break}
+    case'reset':resetAll();toast('مُسحت كل البيانات');break;
+    case'demoClear':resetAll();tab='players';toast('ابدأ بإضافة لاعبي مجموعتك');break;
+    case'demoKeep':S.demo=false;save();break;
+  }
+  render();
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.dataset.in==='seat'){nfGet().seats[+t.dataset.i]=t.value;render()}
+  else if(t.dataset.in==='king1'){nfGet().firstKing=+t.value}
+  else if(t.id==='importFile'&&t.files&&t.files[0]){t.files[0].text().then(x=>{importText=x;render();toast('حُمّل الملف — اضغط استبدل للتأكيد')})}
+});
+document.addEventListener('input',e=>{if(e.target.id==='importText')importText=e.target.value});
+document.addEventListener('submit',e=>{
+  e.preventDefault();
+  const f=e.target;
+  if(f.dataset.form==='addp'){const id=f.querySelector('input').id;addPlayer(f);render();const i=document.getElementById(id);if(i)i.focus()}
+  else if(f.dataset.form==='rename'){
+    const name=f.querySelector('input').value.trim().replace(/\s+/g,' '),p=S.players.find(x=>x.id===f.dataset.id);
+    if(!name){toast('الاسم فارغ');return}
+    if(S.players.some(x=>x.name===name&&x.id!==p.id)){toast('هذا الاسم موجود');return}
+    p.name=name;editing=null;save();render();
+  }
+});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&wl===null&&S.current)wake()});
+
+render();
+})();
+</script>
