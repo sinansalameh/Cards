@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#11694A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>&#x62F;&#x641;&#x62A;&#x631; &#x627;&#x644;&#x634;&#x62F;&#x651;&#x629;</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -413,6 +417,36 @@ function initFirebase(){
   fbReady.catch(()=>{fbReady=null});
   return fbReady;
 }
+/* ---------- analytics (Google Analytics 4, live site only) ----------
+   Events carry game types and counts only: never names, scores or links. */
+const GA_ID='G-2F1PTB25NW';
+const ON_SITE=/\.github\.io$/.test(location.hostname);
+const IS_APP=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;
+if(ON_SITE){
+  window.dataLayer=window.dataLayer||[];
+  window.gtag=function(){window.dataLayer.push(arguments)};
+  gtag('js',new Date());
+  gtag('config',GA_ID,{allow_google_signals:false});
+  gtag('set','user_properties',{display_mode:IS_APP?'app':'browser'});
+  loadScript('https://www.googletagmanager.com/gtag/js?id='+GA_ID).catch(()=>{});
+}
+function track(name,params){if(ON_SITE)try{gtag('event',name,params||{})}catch(e){}}
+
+/* ---------- installable app ---------- */
+let installPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;if(tab==='players')softRender()});
+window.addEventListener('appinstalled',()=>{installPrompt=null;track('app_install');toast('\u062B\u064F\u0628\u0651\u062A \u0627\u0644\u062A\u0637\u0628\u064A\u0642 \u2014 \u062A\u062C\u062F\u0647 \u0628\u064A\u0646 \u062A\u0637\u0628\u064A\u0642\u0627\u062A \u0647\u0627\u062A\u0641\u0643');softRender()});
+if('serviceWorker' in navigator&&(ON_SITE||location.hostname==='localhost'))
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+function viewInstall(){
+  if(IS_APP)return'';
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  const how=installPrompt?'<button class="btn" data-act="install">\u062B\u0628\u0651\u062A \u0627\u0644\u062A\u0637\u0628\u064A\u0642</button>'
+    :ios?'<p class="note">\u0641\u064A Safari: \u0627\u0636\u063A\u0637 \u0632\u0631 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629 \u062B\u0645 \u00AB\u0625\u0636\u0627\u0641\u0629 \u0625\u0644\u0649 \u0627\u0644\u0634\u0627\u0634\u0629 \u0627\u0644\u0631\u0626\u064A\u0633\u064A\u0629\u00BB.</p>'
+    :'<p class="note">\u0641\u064A Chrome: \u0627\u0641\u062A\u062D \u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u22EE \u062B\u0645 \u00AB\u062A\u062B\u0628\u064A\u062A \u0627\u0644\u062A\u0637\u0628\u064A\u0642\u00BB \u0623\u0648 \u00AB\u0625\u0636\u0627\u0641\u0629 \u0625\u0644\u0649 \u0627\u0644\u0634\u0627\u0634\u0629 \u0627\u0644\u0631\u0626\u064A\u0633\u064A\u0629\u00BB.</p>';
+  return`<section class="card"><h2>\u062B\u0628\u0651\u062A \u0627\u0644\u062A\u0637\u0628\u064A\u0642 \u0639\u0644\u0649 \u0647\u0627\u062A\u0641\u0643</h2><p class="note">\u0623\u064A\u0642\u0648\u0646\u0629 \u062E\u0627\u0635\u0629\u060C \u0634\u0627\u0634\u0629 \u0643\u0627\u0645\u0644\u0629\u060C \u0648\u064A\u0639\u0645\u0644 \u062F\u0648\u0646 \u0625\u0646\u062A\u0631\u0646\u062A.</p>${how}</section>`;
+}
+
 function saveCur(){try{localStorage.setItem('shadda.cur.'+G.active,S.current||'')}catch(e){}}
 function stopLive(){if(live)live.unsub.forEach(u=>{try{u()}catch(e){}});live=null}
 function softRender(){
@@ -493,6 +527,7 @@ async function createGroup(name,migrate){
     history.replaceState(null,'',viewLink(gid));
     busy=false;tab='players';connect(gid);
     toast('\u0623\u064F\u0646\u0634\u0626\u062A \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629 \u2014 \u0634\u0627\u0631\u0643 \u0631\u0627\u0628\u0637 \u0627\u0644\u0645\u0634\u0627\u0647\u062F\u0629');
+    track('group_create',{moved_data:migrate?'yes':'no'});
   }catch(e){busy=false;groupErr=fbMsg(e);render()}
 }
 function joinLink(text){
@@ -501,6 +536,7 @@ function joinLink(text){
   G.list[p.gid]=Object.assign(G.list[p.gid]||{name:''},p.key?{key:p.key}:{});
   G.active=p.gid;saveGroups();
   history.replaceState(null,'',viewLink(p.gid));
+  track('group_join',{role:p.key?'scorekeeper':'viewer'});
   tab='game';connect(p.gid);
 }
 function leaveGroup(){
@@ -753,8 +789,8 @@ function viewShare(){
 }
 function viewPlayers(){
   const count=id=>S.games.filter(g=>g.seats.includes(id)).length;
-  if(!canEdit())return viewShare()+`<section class="card"><h2>\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646</h2>${S.players.length?`<ul class="plist">${S.players.map(p=>`<li><span class="nm">${esc(p.name)}</span><span class="pgames">${count(p.id)} \u0644\u0639\u0628\u0629</span></li>`).join('')}</ul>`:'<p class="note">\u0644\u0627 \u064A\u0648\u062C\u062F \u0644\u0627\u0639\u0628\u0648\u0646 \u0628\u0639\u062F.</p>'}</section>`;
-  return viewShare()+`<section class="card"><h2>\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646</h2><p class="note">\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629 \u0627\u0644\u062B\u0627\u0628\u062A\u0629 \u2014 \u062A\u064F\u0628\u0646\u0649 \u0639\u0644\u064A\u0647\u0627 \u0627\u0644\u0625\u062D\u0635\u0627\u0621\u0627\u062A.</p>
+  if(!canEdit())return viewInstall()+viewShare()+`<section class="card"><h2>\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646</h2>${S.players.length?`<ul class="plist">${S.players.map(p=>`<li><span class="nm">${esc(p.name)}</span><span class="pgames">${count(p.id)} \u0644\u0639\u0628\u0629</span></li>`).join('')}</ul>`:'<p class="note">\u0644\u0627 \u064A\u0648\u062C\u062F \u0644\u0627\u0639\u0628\u0648\u0646 \u0628\u0639\u062F.</p>'}</section>`;
+  return viewInstall()+viewShare()+`<section class="card"><h2>\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646</h2><p class="note">\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629 \u0627\u0644\u062B\u0627\u0628\u062A\u0629 \u2014 \u062A\u064F\u0628\u0646\u0649 \u0639\u0644\u064A\u0647\u0627 \u0627\u0644\u0625\u062D\u0635\u0627\u0621\u0627\u062A.</p>
   <form data-form="addp" class="inline"><input id="newp2" placeholder="\u0627\u0633\u0645 \u0627\u0644\u0644\u0627\u0639\u0628" maxlength="24" autocomplete="off"><button class="btn sm">\u0623\u0636\u0641</button></form>
   ${S.players.length?`<ul class="plist">${S.players.map(p=>editing===p.id
     ?`<li><form data-form="rename" data-id="${p.id}" class="inline"><input id="ren-${p.id}" value="${esc(p.name)}" maxlength="24" autocomplete="off"><button class="btn sm">\u062D\u0641\u0638</button><button type="button" class="ghost" data-act="cancelEdit">\u0625\u0644\u063A\u0627\u0621</button></form></li>`
@@ -787,6 +823,7 @@ function newGame(type,seats,firstKing){
   const g={id:uid(),type,createdAt:Date.now(),seats,names:Object.fromEntries(seats.map(i=>[i,playerName(i)])),status:'active',winner:null,finishedAt:null};
   if(type==='tarneeb')g.rounds=[];else{g.deals=[];g.firstKing=firstKing||0}
   S.games.push(g);S.current=g.id;S.demo=false;save();
+  track('game_start',{game_type:type});
 }
 function resetAll(){S={v:1,players:[],games:[],current:null,demo:false};nf=null;drafts={};confirmKey=null;save()}
 function addPlayer(form){
@@ -807,6 +844,7 @@ document.addEventListener('click',e=>{
   renderPending=false;
   switch(a){
     case'follow':follow=true;break;
+    case'install':if(installPrompt){const ev=installPrompt;installPrompt=null;ev.prompt();ev.userChoice.then(c=>{if(c&&c.outcome==='dismissed')toast('\u064A\u0645\u0643\u0646\u0643 \u0627\u0644\u062A\u062B\u0628\u064A\u062A \u0644\u0627\u062D\u0642\u0627\u064B \u0645\u0646 \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u062A\u0635\u0641\u062D');render()}).catch(()=>{})}return;
     case'copylink':{
       const inp=document.getElementById(ds.t);
       const manual=()=>{inp.focus();inp.select();toast('\u0627\u0646\u0633\u062E \u0627\u0644\u0631\u0627\u0628\u0637 \u0627\u0644\u0645\u062D\u062F\u062F')};
@@ -830,6 +868,8 @@ document.addEventListener('click',e=>{
       if(tIssues(d,rules).length)break;
       g.rounds.push({bids:d.bids.slice(),made:d.made.slice()});delete drafts[g.id];
       finalize(g);save();
+      track('round_saved',{game_type:'tarneeb'});
+      if(g.status==='done')track('game_end',{game_type:'tarneeb',rounds:g.rounds.length});
       toast(g.status==='done'?'\u0627\u0646\u062A\u0647\u062A \u0627\u0644\u0644\u0639\u0628\u0629!':`\u0633\u064F\u062C\u0651\u0644\u062A \u0627\u0644\u062C\u0648\u0644\u0629 ${g.rounds.length}`);break}
     case'undo':if(g.type==='tarneeb')g.rounds.pop();else g.deals.pop();delete drafts[g.id];confirmKey=null;finalize(g);save();toast('\u0623\u064F\u0644\u063A\u064A\u062A \u0622\u062E\u0631 \u062C\u0648\u0644\u0629');break;
     case'delgame':S.games=S.games.filter(x=>x.id!==g.id);S.current=null;confirmKey=null;save();toast('\u062D\u064F\u0630\u0641\u062A \u0627\u0644\u0644\u0639\u0628\u0629');break;
@@ -843,6 +883,8 @@ document.addEventListener('click',e=>{
       const k=Math.floor(g.deals.length/5),data={king:d.king,counts:d.counts.slice(),order:d.order.slice()};
       g.deals.push({owner:kingOf(g,k),contract:d.contract,data,pts:trexPts(d.contract,data)});
       delete drafts[g.id];finalize(g);save();
+      track('round_saved',{game_type:'trex'});
+      if(g.status==='done')track('game_end',{game_type:'trex',rounds:g.deals.length});
       toast(g.status==='done'?'\u0627\u0646\u062A\u0647\u062A \u0627\u0644\u0644\u0639\u0628\u0629!':`\u0633\u064F\u062C\u0651\u0644 ${CMAP[d.contract].n}`);break}
     case'edit':editing=ds.id;confirmKey=null;render();{const i=document.getElementById('ren-'+ds.id);if(i){i.focus();i.select()}}return;
     case'cancelEdit':editing=null;break;
@@ -895,7 +937,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 
 {
   const p=parseLink(location.hash);
-  if(p){G.list[p.gid]=Object.assign(G.list[p.gid]||{name:''},p.key?{key:p.key}:{});G.active=p.gid;saveGroups();history.replaceState(null,'',viewLink(p.gid))}
+  if(p){G.list[p.gid]=Object.assign(G.list[p.gid]||{name:''},p.key?{key:p.key}:{});G.active=p.gid;saveGroups();history.replaceState(null,'',viewLink(p.gid));track('group_join',{role:p.key?'scorekeeper':'viewer'})}
   if(G.active)connect(G.active);else{S=load();render()}
 }
 })();
